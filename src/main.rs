@@ -3,10 +3,14 @@ mod config;
 mod ndcode_tun_engine;
 mod net_transport;
 mod pipeline;
+mod disclaimer;
+#[cfg(target_os = "windows")]
+mod win_wintun;
 
 use config::{AppConfig, RunningMode};
 use ndcode_tun_engine::NDcodeTunEngine;
 use pipeline::NDcodePipeline;
+use disclaimer::print_disclaimer;
 
 use anyhow::{Context, Result};
 use std::env;
@@ -18,6 +22,13 @@ use tokio::net::{TcpListener, TcpStream};
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    print_and_confirm_disclaimer()?;
+    #[cfg(target_os = "windows")]
+    {
+        // 啟動前自動釋放內嵌 DLL，無需外連下載 PowerShell 腳本
+        win_wintun::win_wintun::ensure_wintun_embedded()
+            .context("Wintun 內嵌驅動釋放失敗")?;
+    }
     let args: Vec<String> = env::args().collect();
 
     // 若帶入 --setup 參數或找不到 config 時觸發跨平台自動化設定嚮導
