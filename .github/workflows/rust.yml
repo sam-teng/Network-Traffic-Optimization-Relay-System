@@ -16,6 +16,9 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+    - name: Configure Git Credentials
+      run: |
+        git config --global url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@://github.com".insteadOf "https://://github.com"
     - name: Run tests
       run: cargo test --verbose
     - name: Build Linux
