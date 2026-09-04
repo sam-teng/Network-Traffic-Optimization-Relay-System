@@ -12,6 +12,9 @@ env:
   CARGO_NET_GIT_FETCH_WITH_CLI: true
   CROSS_REMOTE_USER_CONFIG: true
 
+permissions:
+  contents: read
+
 jobs:
   build_and_upload:
     runs-on: ubuntu-latest
