@@ -22,20 +22,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
-    - name: Set up Rust Toolchain
-      uses: dtolnay/rust-toolchain@nightly
     
-    - name: Rust Cache
-      uses: Swatinem/rust-cache@v2
-      with:
-        # 當快取儲存失敗時不要讓整個 CI 壞掉
-        continue-on-error: true
-
-    - name: Install Rust binaries
-      uses: taiki-e/install-action@v2
-      with:
-        tool: cargo-nextest, cargo-hack, cargo-cross
-
     - name: Install All Linux System C Dependencies
       run: |
         sudo apt-get update
@@ -57,7 +44,21 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y pkg-config libgtk-3-dev
-      
+        
+    - name: Set up Rust Toolchain
+      uses: dtolnay/rust-toolchain@nightly
+    
+    - name: Rust Cache
+      uses: Swatinem/rust-cache@v2
+      with:
+        # 當快取儲存失敗時不要讓整個 CI 壞掉
+        continue-on-error: true
+
+    - name: Install Rust binaries
+      uses: taiki-e/install-action@v2
+      with:
+        tool: cargo-nextest, cargo-hack, cargo-cross
+    
     - name: Configure Git Credentials
       run: |
         git config --global credential.helper 'store'
@@ -65,7 +66,7 @@ jobs:
         
     #- name: Run tests
     #  run: cargo test --verbose
-
+    
     - name: Build Linux
       run: cargo cross build --targets x86_64-unknown-linux-gnu,aarch64-unknown-linux-gnu --verbose --release
 
