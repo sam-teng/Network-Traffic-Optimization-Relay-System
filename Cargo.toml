@@ -7,6 +7,14 @@ edition = "2024"
 name = "NTORS"
 path = "src/main.rs"
 
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+rand = "0.8"
+
+[[bench]]
+name = "engine_bench"
+harness = false
+
 [dependencies]
 # 錯誤處理與日誌輸出
 anyhow = "1.0"
