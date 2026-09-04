@@ -13,7 +13,7 @@ env:
   CROSS_REMOTE_USER_CONFIG: true
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build_and_upload:
