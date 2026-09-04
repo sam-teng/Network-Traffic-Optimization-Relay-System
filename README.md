@@ -28,10 +28,9 @@ Network Traffic Optimization &amp; Relay System
 │    - 檢查 Header 類型                                        │
 │    - 走 safe_xz_decompress() 與連鎖鏈還原原始 IP 封包         │
 └─────────────────────────────────────────────────────────────┘
-
-* **How to use** *
-
 ```
+
+# ***How to use***
 > Server mode
 ```bash
 sudo ./target/release/ndcode_throttler --mode server --listen-addr 0.0.0.0:8080
