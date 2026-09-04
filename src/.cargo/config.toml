@@ -1,0 +1,4 @@
+
+[net]
+# 強制 Cargo 使用系統的 Git 執行檔來抓取資料，這會繼承 Git 的憑證設定
+git-fetch-with-cli = true

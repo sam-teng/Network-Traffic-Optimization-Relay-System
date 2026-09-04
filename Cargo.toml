@@ -12,13 +12,9 @@ tun = { version = "0.6", features = ["async"] }
 clap = { version = "4.5", features = ["derive"] }
 NDcode3 = { git = "https://github.com/sam-teng/NDcode3.git" }
 
-[net]
-# 強制 Cargo 使用系統的 Git 執行檔來抓取資料，這會繼承 Git 的憑證設定
-git-fetch-with-cli = true
-
 # 高效能發行版 (適用於 PC / 樹莓派 / 行動端，開啟最大 SIMD 與 LTO 自動向量化)
 [profile.release]
-opt-level = 3       # ⚡ 設為 3 以啟動 LLVM SIMD 向量化與迴圈展開
+opt-level = 3       # 設為 3 以啟動 LLVM SIMD 向量化與迴圈展開
 lto = "fat"         # 全域跨 Crate 鏈接優化
 codegen-units = 1   # 提高向量指令生成品質
 strip = true        # 剝離 Debug 符號
