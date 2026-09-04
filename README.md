@@ -18,8 +18,8 @@ Network Traffic Optimization &amp; Relay System
 │                        ▼                                        │
 │ 2. 呼叫 NDCodeLogic::build_chained_cascade()                     │
 │    - 逐位元組 SIMD 差值計算                                        │
-│    - XZ 預壓縮                                                     │
-│ 3. 附加 MASTER_MAGIC_HEADER (b"ND3:")                              │
+│    - XZ 預壓縮                                                   │
+│ 3. 附加 MASTER_MAGIC_HEADER (b"ND3:")                            │
 │ 4.    跳過渲染 ──> 直接輸出位元串流 (Raw Bytes)                      │
 └──────────────────────────────┬──────────────────────────────────┘
                                │
