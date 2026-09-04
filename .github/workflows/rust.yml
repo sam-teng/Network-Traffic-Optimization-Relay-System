@@ -21,6 +21,12 @@ jobs:
     
     - name: Set up Rust Toolchain
       uses: dtolnay/rust-toolchain@nightly
+    
+    - name: Rust Cache
+      uses: Swatinem/rust-cache@v2
+      with:
+        # 當快取儲存失敗時不要讓整個 CI 壞掉
+        continue-on-error: true
 
     - name: Install Rust binaries
       uses: taiki-e/install-action@v2
