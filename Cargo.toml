@@ -1,5 +1,5 @@
 [package]
-name = "ndcode_throttler"
+name = "NTORS"
 version = "0.0.0-NDcode3"
 edition = "2024"
 
