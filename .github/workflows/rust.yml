@@ -21,7 +21,7 @@ jobs:
 
     - name: Configure Git Credentials
       run: |
-        git config --global url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@://github.com".insteadOf "https://://github.com"
+        git config --global url."https://x-access-token:${{ secrets.NDCODE3_PAT }}@://github.com".insteadOf "https://://github.com"
 
     - name: Run tests
       run: cargo test --verbose
