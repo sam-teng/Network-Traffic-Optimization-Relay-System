@@ -29,7 +29,7 @@ Network Traffic Optimization &amp; Relay System
 │    - 走 safe_xz_decompress() 與連鎖鏈還原原始 IP 封包         │
 └─────────────────────────────────────────────────────────────┘
 
-***How to use***
+* **How to use** *
 
 ```
 > Server mode
