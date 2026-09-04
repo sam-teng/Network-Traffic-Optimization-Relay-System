@@ -2,20 +2,19 @@
 mod config;
 mod ndcode_tun_engine;
 mod net_transport;
+mod pipeline;
 
 use anyhow::{Context, Result};
 use config::{AppConfig, RunningMode};
 use ndcode_tun_engine::NDcodeTunEngine;
-use net_transport::{recv_framed_payload, send_framed_payload};
+use pipeline::NDcodePipeline;
 use std::sync::Arc;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::Mutex;
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let config = AppConfig::parse_args();
-    println!("🚀 啟動 NDcode 3 網路節流器 | 模式: {:?}", config.mode);
+    println!("🚀 啟動 NDcode 3 網路節流器 (管線模式) | 模式: {:?}", config.mode);
 
     let mut tun_config = tun::Configuration::default();
     tun_config
@@ -28,7 +27,7 @@ async fn main() -> Result<()> {
         .context("建立 TUN 虛擬網卡失敗 (請確認執行權限如 root/sudo)")?;
     println!("✅ TUN 網卡 [{}] 掛載成功 (IP: {})", config.tun_name, config.tun_ip);
 
-    let (mut tun_reader, mut tun_writer) = tokio::io::split(dev);
+    let (tun_reader, tun_writer) = tokio::io::split(dev);
     let engine = Arc::new(NDcodeTunEngine::new());
 
     match config.mode {
@@ -36,7 +35,7 @@ async fn main() -> Result<()> {
             run_client_mode(config, engine, tun_reader, tun_writer).await?;
         }
         RunningMode::Server => {
-            run_server_mode(config, engine, tun_reader, tun_writer).await?;
+            run_server_mode(config, engine).await?;
         }
     }
 
@@ -53,99 +52,46 @@ where
     R: tokio::io::AsyncRead + Unpin + Send + 'static,
     W: tokio::io::AsyncWrite + Unpin + Send + 'static,
 {
-    println!("📡 [Client] 正在連線至 Server 位址: {}", config.server_addr);
+    println!("📡 [Client] 連線至 Server: {}", config.server_addr);
     let socket = TcpStream::connect(config.server_addr)
         .await
-        .context("無法建立與伺服端的 TCP 連線")?;
-    println!("✅ [Client] 連線成功！啟動雙向流量壓縮傳輸管線...");
+        .context("無法建立 TCP 連線")?;
+    println!("✅ [Client] 連線成功！平行雙向管線已建置");
 
-    let (mut tcp_read, tcp_write) = socket.into_split();
-    let tcp_writer_mutex = Arc::new(Mutex::new(tcp_write));
+    let (tcp_read, tcp_write) = socket.into_split();
 
-    // 任務 A: 本機 TUN 讀取 -> NDcode3 壓縮 -> 送出至 Server
-    let engine_tx = engine.clone();
-    let tcp_tx_writer = tcp_writer_mutex.clone();
-    let upstream_task = tokio::spawn(async move {
-        let mut buf = [0u8; 4096];
-        loop {
-            // ⚡ 修正：由 &buf 改為 &mut buf
-            let n = match tun_reader.read(&mut buf).await {
-                Ok(n) if n > 0 => n,
-                _ => break,
-            };
+    // 並行啟動獨立的上行與下行管線
+    let upstream = NDcodePipeline::spawn_upstream_pipeline(tun_reader, tcp_write, engine.clone());
+    let downstream = NDcodePipeline::spawn_downstream_pipeline(tcp_read, tun_writer, engine.clone());
 
-            let raw_packet = &buf[..n];
-            if let Ok(compressed_payload) = engine_tx.process_outgoing_packet(raw_packet) {
-                let mut lock = tcp_tx_writer.lock().await;
-                if send_framed_payload(&mut *lock, &compressed_payload).await.is_err() {
-                    eprintln!("❌ [Client] 傳送至 Server 失敗，中斷上行連線");
-                    break;
-                }
-            }
-        }
-    });
-
-    // 任務 B: Server 接收 compressed -> NDcode3 解壓 -> 寫回本機 TUN
-    let engine_rx = engine.clone();
-    let downstream_task = tokio::spawn(async move {
-        loop {
-            match recv_framed_payload(&mut tcp_read).await {
-                Ok(payload) => {
-                    if let Ok(raw_packet) = engine_rx.process_incoming_payload(&payload) {
-                        let _ = tun_writer.write_all(&raw_packet).await;
-                    }
-                }
-                Err(_) => {
-                    eprintln!("❌ [Client] 與 Server 的下行斷開");
-                    break;
-                }
-            }
-        }
-    });
-
-    let _ = tokio::try_join!(upstream_task, downstream_task);
+    let _ = tokio::try_join!(upstream, downstream);
     Ok(())
 }
 
-async fn run_server_mode<R, W>(
+async fn run_server_mode(
     config: AppConfig,
     engine: Arc<NDcodeTunEngine>,
-    _tun_reader: R,
-    _tun_writer: W,
-) -> Result<()>
-where
-    R: tokio::io::AsyncRead + Unpin + Send + 'static,
-    W: tokio::io::AsyncWrite + Unpin + Send + 'static,
-{
+) -> Result<()> {
     let listener = TcpListener::bind(config.listen_addr)
         .await
         .context("無法綁定 Server 監聽埠")?;
     println!("🌐 [Server] 伺服端已啟動，監聽於: {}", config.listen_addr);
 
     loop {
-        let (mut socket, peer_addr) = listener.accept().await?;
-        println!("🔗 [Server] 收到客戶端連線來自: {}", peer_addr);
+        let (socket, peer_addr) = listener.accept().await?;
+        println!("🔗 [Server] 新連線來自: {}", peer_addr);
 
         let engine_clone = engine.clone();
 
         tokio::spawn(async move {
-            let (mut tcp_read, mut tcp_write) = socket.split();
-
-            loop {
-                let payload = match recv_framed_payload(&mut tcp_read).await {
-                    Ok(p) => p,
-                    Err(_) => {
-                        println!("🔌 [Server] 客戶端 {} 已離線", peer_addr);
-                        break;
-                    }
-                };
-
-                if let Ok(raw_packet) = engine_clone.process_incoming_payload(&payload) {
-                    if let Ok(echo_payload) = engine_clone.process_outgoing_packet(&raw_packet) {
-                        let _ = send_framed_payload(&mut tcp_write, &echo_payload).await;
-                    }
-                }
-            }
+            let (tcp_read, tcp_write) = socket.into_split();
+            
+            // Server 端的內部 Echo 管線 (可根據需求對接外網介面)
+            let _ = NDcodePipeline::spawn_downstream_pipeline(
+                tcp_read,
+                tokio::io::sink(), // 範例：丟入 Sink 或對接虛擬介面
+                engine_clone,
+            ).await;
         });
     }
 }
