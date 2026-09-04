@@ -19,7 +19,7 @@ Network Traffic Optimization &amp; Relay System
 │ 2. 呼叫 NDCodeLogic::build_chained_cascade()                    │
 │    - XZ 預壓縮                                                  │
 │ 3. 附加 MASTER_MAGIC_HEADER (b"ND3:")                           │
-│ 4. ⚡跳過渲染 ──> 直接輸出位元串流 (Raw Bytes)                   │
+│ 4.    跳過渲染 ──> 直接輸出位元串流 (Raw Bytes)                   │
 └──────────────────────────────┬──────────────────────────────────┘
                                │
                                ▼ 傳輸至遠端代理伺服器 (Server)
@@ -28,4 +28,16 @@ Network Traffic Optimization &amp; Relay System
 │    - 檢查 Header 類型                                        │
 │    - 走 safe_xz_decompress() 與連鎖鏈還原原始 IP 封包         │
 └─────────────────────────────────────────────────────────────┘
+
+***How to use***
+
+```
+> Server mode
+```bash
+sudo ./target/release/ndcode_throttler --mode server --listen-addr 0.0.0.0:8080
+```
+
+> Client mode
+```bash
+sudo ./target/release/ndcode_throttler --mode client --server-addr <SERVER_IP>:8080
 ```
