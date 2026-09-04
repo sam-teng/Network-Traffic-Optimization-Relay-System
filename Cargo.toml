@@ -15,6 +15,9 @@ rand = "0.8"
 name = "engine_bench"
 harness = false
 
+[[test]]
+name = "functional_tests"
+
 [dependencies]
 # 錯誤處理與日誌輸出
 anyhow = "1.0"
