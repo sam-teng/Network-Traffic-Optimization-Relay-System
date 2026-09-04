@@ -10,7 +10,7 @@ mod win_wintun;
 use config::{AppConfig, RunningMode};
 use ndcode_tun_engine::NDcodeTunEngine;
 use pipeline::NDcodePipeline;
-use disclaimer::print_disclaimer;
+use disclaimer::print_and_confirm_disclaimer;
 
 use anyhow::{Context, Result};
 use std::env;
@@ -36,7 +36,7 @@ async fn main() -> Result<()> {
         run_interactive_setup_wizard()?;
     }
 
-    let config = AppConfig::load_or_parse_args()?;
+    let config = AppConfig::parse_args()?;
     println!(
         "🚀 啟動 NDcode 3 網路節流器 (管線模式) | 模式: {:?} | OS: {}",
         config.mode,

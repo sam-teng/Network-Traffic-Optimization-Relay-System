@@ -30,8 +30,10 @@ pub fn print_and_confirm_disclaimer() -> Result<()> {
     println!("7. Cargo-cross: https://crates.io/crates/cargo-cross");
     println!("8. criterion: https://crates.io/crates/criterion");
     println!("9. rand: https://crates.io/crates/rand");
-    println!("10. and many other open-source projects that have contributed to the development of NTORS.");
-    println!("11. Thank for all the developers and contributors of these projects for their dedication and hard work!");
+    println!("10. serde: https://crates.io/crates/serde");
+    println!("11. serde_json: https://crates.io/crates/serde_json");
+    println!("\tand many other open-source projects that have contributed to the development of NTORS.");
+    println!("Thank for all the developers and contributors of these projects for their dedication and hard work!");
     println!("------------------------------------------------------------------");
 
     print!("👉 是否已閱讀並同意上述聲明以繼續執行？ (y/N): ");

@@ -7,7 +7,7 @@ use crate::ndcode_tun_engine::{NDcodeTunEngine, NDCODE_PACKET_THRESHOLD};
 /// 生成指定長度的隨機 Payload 數據
 fn generate_dummy_packet(size: usize) -> Vec<u8> {
     let mut rng = rand::thread_rng();
-    (0..size).map(|_| rng.gen::<u8>()).collect()
+    (0..size).map(|_| rng.r#gen::<u8>()).collect()
 }
 
 #[test]
