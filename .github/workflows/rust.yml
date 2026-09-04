@@ -45,7 +45,8 @@ jobs:
           libgtk-3-dev \
           libjavascriptcoregtk-4.1-dev \
           libwebkit2gtk-4.1-dev
-        sudo apt-get install pkg-config libssl-dev
+        sudo apt-get update
+        sudo apt-get -y install pkg-config libssl-dev
 
     - name: Install System Dependencies (GLib)
       run: |
