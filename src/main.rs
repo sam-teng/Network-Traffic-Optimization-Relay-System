@@ -33,10 +33,10 @@ async fn main() -> Result<()> {
 
     match config.mode {
         RunningMode::Client => {
-            run_client_mode(config, engine, &mut tun_reader, &mut tun_writer).await?;
+            run_client_mode(config, engine, tun_reader, tun_writer).await?;
         }
         RunningMode::Server => {
-            run_server_mode(config, engine, &mut tun_reader, &mut tun_writer).await?;
+            run_server_mode(config, engine, tun_reader, tun_writer).await?;
         }
     }
 
@@ -46,8 +46,8 @@ async fn main() -> Result<()> {
 async fn run_client_mode<R, W>(
     config: AppConfig,
     engine: Arc<NDcodeTunEngine>,
-    tun_reader: &mut R,
-    tun_writer: &mut W,
+    tun_reader: R,
+    tun_writer: W,
 ) -> Result<()>
 where
     R: tokio::io::AsyncRead + Unpin + Send + 'static,
@@ -110,8 +110,8 @@ where
 async fn run_server_mode<R, W>(
     config: AppConfig,
     engine: Arc<NDcodeTunEngine>,
-    _tun_reader: &mut R,
-    _tun_writer: &mut W,
+    _tun_reader: R,
+    _tun_writer: W,
 ) -> Result<()>
 where
     R: tokio::io::AsyncRead + Unpin + Send + 'static,
