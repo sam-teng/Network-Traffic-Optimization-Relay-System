@@ -1,0 +1,25 @@
+[package]
+name = "ndcode_throttler"
+version = "0.0.0-NDcode3"
+edition = "2024"
+
+[dependencies]
+# 非同步 Runtime 與 TCP 通訊
+tokio = { version = "1.38", features = ["full"] }
+# Layer 3 虛擬網卡
+tun = { version = "0.6", features = ["async"] }
+# 命令列參數解析
+clap = { version = "4.5", features = ["derive"] }
+NDcode3 = { git = "https://github.com/sam-teng/NDcode3.git" }
+# 高效能發行版 (適用於 PC / 樹莓派 / 行動端，開啟最大 SIMD 與 LTO 自動向量化)
+[profile.release]
+opt-level = 3       # ⚡ 設為 3 以啟動 LLVM SIMD 向量化與迴圈展開
+lto = "fat"         # 全域跨 Crate 鏈接優化
+codegen-units = 1   # 提高向量指令生成品質
+strip = true        # 剝離 Debug 符號
+panic = "abort"     # 移除 Unwind 棧，減小極限體積
+
+# 嵌入式 MCU / 極限體積發行版 (透過 cargo build --profile release-small 呼叫)
+[profile.release-small]
+inherits = "release"
+opt-level = "z"     # 專注於代碼最小化
