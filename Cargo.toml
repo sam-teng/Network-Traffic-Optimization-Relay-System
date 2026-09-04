@@ -4,6 +4,8 @@ version = "0.0.0-NDcode3"
 edition = "2024"
 
 [dependencies]
+# 錯誤處理與日誌輸出
+anyhow = "1.0"
 # 非同步 Runtime 與 TCP 通訊
 tokio = { version = "1.38", features = ["full"] }
 # Layer 3 虛擬網卡
