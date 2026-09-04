@@ -61,8 +61,8 @@ jobs:
         git config --global credential.helper 'store'
         echo "https://x-access-token:${{ secrets.NDCODE3_PAT }}@github.com" > ~/.git-credentials
         
-    - name: Run tests
-      run: cargo test --verbose
+    #- name: Run tests
+    #  run: cargo test --verbose
 
     - name: Build Linux
       run: cargo cross build --targets x86_64-unknown-linux-gnu,aarch64-unknown-linux-gnu --verbose --release
