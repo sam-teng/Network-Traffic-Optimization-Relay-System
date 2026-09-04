@@ -10,6 +10,7 @@ env:
   CARGO_TERM_COLOR: always
   # 強制 Cargo 在所有步驟中皆使用系統 Git CLI，確保順利帶入私有庫存取憑證
   CARGO_NET_GIT_FETCH_WITH_CLI: true
+  CROSS_REMOTE_USER_CONFIG: true
 
 jobs:
   build_and_upload:
