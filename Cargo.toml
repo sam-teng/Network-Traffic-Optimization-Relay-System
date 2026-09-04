@@ -3,6 +3,10 @@ name = "NTORS"
 version = "0.0.0-NDcode3"
 edition = "2024"
 
+[[bin]]
+name = "NTORS"
+path = "src/main.rs"
+
 [dependencies]
 # 錯誤處理與日誌輸出
 anyhow = "1.0"
