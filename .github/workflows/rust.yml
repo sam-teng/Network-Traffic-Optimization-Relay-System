@@ -26,6 +26,9 @@ jobs:
       uses: taiki-e/install-action@v2
       with:
         tool: cargo-nextest, cargo-hack, cargo-cross
+
+    - name: Install System Dependencies Automatically
+      uses: system-dependencies/system-dependencies@v1
         
     - name: Install System Dependencies (GLib)
       run: |
