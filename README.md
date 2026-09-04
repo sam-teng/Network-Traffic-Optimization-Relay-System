@@ -1,3 +1,4 @@
+[![Build NTORS Rust APP Upload a Build Artifact](https://github.com/sam-teng/Network-Traffic-Optimization-Relay-System/actions/workflows/rust.yml/badge.svg)](https://github.com/sam-teng/Network-Traffic-Optimization-Relay-System/actions/workflows/rust.yml)
 # Network-Traffic-Optimization-Relay-System(NTORS)
 Network Traffic Optimization &amp; Relay System
 
