@@ -22,7 +22,7 @@ NDcode 3 (Network Traffic Optimization Relay System) 是一個高效能、跨平
 # ***本軟體專為學術研究、教育訓練與個人合法網路最佳化而開發。使用者在使用本系統時，必須嚴格遵守當地網路通訊與資訊安全法規（例如《中華民國刑法》第 36 章妨害電腦使用罪）。禁止將本軟體用於任何未經授權之流量攔截、竊聽、惡意跳板或商業等違法用途。***
 
 ### 3. 專利與演算法免責聲明 (Patent Disclaimer)
-NDcode 3 包含引用[https://crates.io/crates/raptorq](https://crates.io/crates/raptorq)多維網格編碼與前向糾錯（FEC / RaptorQ - RFC 6330）演算法。本專案不提供任何顯式或默示之專利授權擔保（包括但不限於 Qualcomm Incorporated 或其他實體持有之專利）。使用者若將本系統用於商業化產品部署，需自行評估並取得相關專利授權。
+NDcode 3 包含引用[https://crates.io/crates/raptorq](https://crates.io/crates/raptorq)（FEC / RaptorQ - RFC 6330）演算法。本專案不提供任何顯式或默示之專利授權擔保（包括但不限於 Qualcomm Incorporated 或其他實體持有之專利）。使用者若將本系統用於商業化產品部署，需自行評估並取得相關專利授權。
 
 ### 4. 資訊收集與隱私政策 (Information collection and privacy policy)
 請參閱[https://github.com/sam-teng/Network-Traffic-Optimization-Relay-System/PRIVACY.md](https://github.com/sam-teng/Network-Traffic-Optimization-Relay-System/blob/main/PRIVACY.md)
