@@ -19,7 +19,6 @@ harness = false
 name = "functional_tests"
 
 [dependencies]
-openssl = { version = "0.10", features = ["vendored"] }
 # 錯誤處理與日誌輸出
 anyhow = "1.0"
 # 非同步 Runtime 與 TCP 通訊
@@ -30,6 +29,9 @@ tun = { version = "0.6", features = ["async"] }
 clap = { version = "4.5", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+hmac = "0.12"
+sha2 = "0.10"
+rand = "0.8"
 NDcode3 = { git = "https://github.com/sam-teng/NDcode3.git" }
 
 # 高效能發行版 (適用於 PC / 樹莓派 / 行動端，開啟最大 SIMD 與 LTO 自動向量化)
