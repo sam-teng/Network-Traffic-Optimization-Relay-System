@@ -4,6 +4,10 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::sync::mpsc;
 use crate::ndcode_tun_engine::NDcodeTunEngine;
 use crate::net_transport::{recv_framed_payload, send_framed_payload};
+use crate::pipeline::auth::NdCodeAuth;
+use crate::pipeline::key_manager::DynamicKeyManager;
+use crate::pipeline::obfuscation::Obfuscator;
+use crate::pipeline::gradient_mesh::{GradientMeshEngine, GradientFeedbackPacket};
 
 /// 管線 Channel 緩衝區容量
 const PIPELINE_BUFFER_SIZE: usize = 1024;
@@ -11,11 +15,13 @@ const PIPELINE_BUFFER_SIZE: usize = 1024;
 pub struct NDcodePipeline;
 
 impl NDcodePipeline {
-    /// 啟動上行資料管線: TUN 讀取 ──> NDcode3 壓縮編碼 ──> TCP 傳送
+    /// 啟動上行資料管線: TUN 讀取 ──> NDcode3 壓縮編碼 ──> 動態 Padding 混淆 ──> TCP 傳送
     pub async fn spawn_upstream_pipeline<R, W>(
         mut tun_reader: R,
         mut tcp_writer: W,
         engine: Arc<NDcodeTunEngine>,
+        obfuscator: Arc<Obfuscator>,
+        mesh_engine: Arc<GradientMeshEngine>,
     ) -> Result<()>
     where
         R: AsyncRead + Unpin + Send + 'static,
@@ -39,13 +45,16 @@ impl NDcodePipeline {
             }
         });
 
-        // Stage 2: Processing Task (NDcode 3 噴泉碼/XZ 壓縮處理)
+        // Stage 2: Processing Task (NDcode 3 噴泉碼/XZ 壓縮 + 混淆處理)
         let engine_proc = engine.clone();
+        let obf_proc = obfuscator.clone();
         let mut raw_rx_stream = raw_rx;
         let stage_process = tokio::spawn(async move {
             while let Some(raw_packet) = raw_rx_stream.recv().await {
                 if let Ok(compressed_payload) = engine_proc.process_outgoing_packet(&raw_packet) {
-                    if proc_tx.send(compressed_payload).await.is_err() {
+                    // 套用動態 Padding 與量化時間戳混淆
+                    let obfuscated_payload = obf_proc.obfuscate(&compressed_payload);
+                    if proc_tx.send(obfuscated_payload).await.is_err() {
                         break;
                     }
                 }
@@ -66,11 +75,13 @@ impl NDcodePipeline {
         Ok(())
     }
 
-    /// 啟動下行資料管線: TCP 接收 ──> NDcode3 RaptorQ 解碼 ──> TUN 寫回
+    /// 啟動下行資料管線: TCP 接收 ──> 解除混淆 ──> NDcode3 RaptorQ 解碼 ──> 梯度計算 ──> TUN 寫回
     pub async fn spawn_downstream_pipeline<R, W>(
         mut tcp_reader: R,
         mut tun_writer: W,
         engine: Arc<NDcodeTunEngine>,
+        obfuscator: Arc<Obfuscator>,
+        mesh_engine: Arc<GradientMeshEngine>,
     ) -> Result<()>
     where
         R: AsyncRead + Unpin + Send + 'static,
@@ -79,13 +90,34 @@ impl NDcodePipeline {
         let (compressed_tx, compressed_rx) = mpsc::channel::<Vec<u8>>(PIPELINE_BUFFER_SIZE);
         let (raw_tx, mut raw_rx) = mpsc::channel::<Vec<u8>>(PIPELINE_BUFFER_SIZE);
 
-        // Stage 1: Ingress Task (從 TCP 接收長度前綴封包)
+        // Stage 1: Ingress Task (從 TCP 接收長度前綴封包並解除混淆)
+        let obf_ingress = obfuscator.clone();
+        let mesh_ingress = mesh_engine.clone();
         let stage_ingress = tokio::spawn(async move {
             loop {
                 match recv_framed_payload(&mut tcp_reader).await {
                     Ok(payload) => {
-                        if compressed_tx.send(payload).await.is_err() {
-                            break;
+                        // 判斷是否為 8-Byte 反向梯度封包
+                        if payload.len() == 8 {
+                            if let Some(feedback) = GradientFeedbackPacket::from_bytes(&payload) {
+                                mesh_ingress.apply_gradient_feedback(&feedback).await;
+                                continue;
+                            }
+                        }
+
+                        // 進行解混淆處理
+                        match obf_ingress.deobfuscate(&payload) {
+                            Ok(deobf) => {
+                                if compressed_tx.send(deobf).await.is_err() {
+                                    break;
+                                }
+                            }
+                            Err(_) => {
+                                // 若解混淆失敗，嘗試以未混淆封包直接處理 (向下相容)
+                                if compressed_tx.send(payload).await.is_err() {
+                                    break;
+                                }
+                            }
                         }
                     }
                     Err(_) => break,

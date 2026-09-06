@@ -2,6 +2,7 @@
 mod config;
 mod ndcode_tun_engine;
 mod net_transport;
+#[path = "pipeline/mod.rs"]
 mod pipeline;
 mod disclaimer;
 #[cfg(target_os = "windows")]
@@ -36,7 +37,7 @@ async fn main() -> Result<()> {
         run_interactive_setup_wizard()?;
     }
 
-    let config = AppConfig::parse_args()?;
+    let config = AppConfig::parse_args();
     println!(
         "🚀 啟動 NDcode 3 網路節流器 (管線模式) | 模式: {:?} | OS: {}",
         config.mode,
@@ -230,16 +231,43 @@ where
     W: tokio::io::AsyncWrite + Unpin + Send + 'static,
 {
     println!("📡 [Client] 連線至 Server: {}", config.server_addr);
-    let socket = TcpStream::connect(&config.server_addr)
+    let mut socket = TcpStream::connect(&config.server_addr)
         .await
         .context("無法建立 TCP 連線")?;
+
+    // 初始化安全模組：動態金鑰管理器、混淆模組與梯度網格引擎
+    let key_mgr = pipeline::key_manager::DynamicKeyManager::new(1, b"NDcode3_Default_PSK_SecretKey_2026".to_vec());
+    let obfuscator = Arc::new(pipeline::obfuscation::Obfuscator::default());
+    let mesh_engine = Arc::new(pipeline::gradient_mesh::GradientMeshEngine::new(1001, 0.7, 0.3, 0.05));
+    mesh_engine.register_peer(1, config.server_addr).await;
+
+    // 執行 HMAC-SHA256 安全握手
+    pipeline::auth::NdCodeAuth::client_handshake::<TcpStream>(&mut socket, &key_mgr)
+        .await
+        .map_err(|e| anyhow::anyhow!("Client 握手失敗: {}", e))?;
+    println!("🔐 [Client] HMAC-SHA256 握手驗證通過！動態 Padding 混淆與反向梯度控制就緒");
+
     println!("✅ [Client] 連線成功！雙向平行管線運作中");
 
     let (tcp_read, tcp_write) = socket.into_split();
-    let upstream = NDcodePipeline::spawn_upstream_pipeline(tun_reader, tcp_write, engine.clone());
-    let downstream = NDcodePipeline::spawn_downstream_pipeline(tcp_read, tun_writer, engine.clone());
+    let upstream = NDcodePipeline::spawn_upstream_pipeline(
+        tun_reader,
+        tcp_write,
+        engine.clone(),
+        obfuscator.clone(),
+        mesh_engine.clone(),
+    );
+    let downstream = NDcodePipeline::spawn_downstream_pipeline(
+        tcp_read,
+        tun_writer,
+        engine.clone(),
+        obfuscator.clone(),
+        mesh_engine.clone(),
+    );
 
-    let _ = tokio::try_join!(upstream, downstream);
+    let (res_up, res_down) = tokio::join!(upstream, downstream);
+    res_up?;
+    res_down?;
     Ok(())
 }
 
@@ -249,19 +277,41 @@ async fn run_server_mode(config: AppConfig, engine: Arc<NDcodeTunEngine>) -> Res
         .context("無法綁定 Server 監聽埠")?;
     println!("🌐 [Server] 伺服端已啟動，監聽於: {}", config.listen_addr);
 
+    let key_mgr = Arc::new(pipeline::key_manager::DynamicKeyManager::new(
+        1,
+        b"NDcode3_Default_PSK_SecretKey_2026".to_vec(),
+    ));
+    let obfuscator = Arc::new(pipeline::obfuscation::Obfuscator::default());
+    let mesh_engine = Arc::new(pipeline::gradient_mesh::GradientMeshEngine::new(1, 0.7, 0.3, 0.05));
+
     loop {
-        let (socket, peer_addr) = listener.accept().await?;
+        let (mut socket, peer_addr) = listener.accept().await?;
         println!("🔗 [Server] 新連線來自: {}", peer_addr);
         let engine_clone = engine.clone();
+        let key_mgr_clone = key_mgr.clone();
+        let obfuscator_clone = obfuscator.clone();
+        let mesh_engine_clone = mesh_engine.clone();
 
         tokio::spawn(async move {
+            // 伺服端驗證 Client 握手封包
+            if let Err(e) = pipeline::auth::NdCodeAuth::server_handshake::<TcpStream>(&mut socket, &key_mgr_clone).await {
+                eprintln!("❌ [Server] Peer ({}) 握手驗證拒絕: {}", peer_addr, e);
+                return;
+            }
+            println!("🔐 [Server] Peer ({}) 握手驗證成功！", peer_addr);
+
+            mesh_engine_clone.register_peer(1001, peer_addr).await;
+
             let (tcp_read, tcp_write) = socket.into_split();
             let _ = NDcodePipeline::spawn_downstream_pipeline(
                 tcp_read,
                 tokio::io::sink(),
                 engine_clone,
+                obfuscator_clone,
+                mesh_engine_clone,
             )
             .await;
         });
     }
 }
+

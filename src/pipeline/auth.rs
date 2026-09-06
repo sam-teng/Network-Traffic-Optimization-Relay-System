@@ -3,7 +3,7 @@ use sha2::Sha256;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-use crate::pipeline::key_manager::{DynamicKeyManager, KeyError};
+use crate::pipeline::key_manager::DynamicKeyManager;
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -74,7 +74,7 @@ impl NdCodeAuth {
         let psk = key_mgr
             .get_key_by_id(key_id)
             .await
-            .ok_ok_or_else(|| format!("伺服器找不到對應 Key ID ({}) 的金鑰，驗證拒絕", key_id))?;
+            .ok_or_else(|| format!("伺服器找不到對應 Key ID ({}) 的金鑰，驗證拒絕", key_id))?;
 
         // 3. 常數時間 HMAC 校驗
         let mut mac = HmacSha256::new_from_slice(&psk).map_err(|e| e.to_string())?;
