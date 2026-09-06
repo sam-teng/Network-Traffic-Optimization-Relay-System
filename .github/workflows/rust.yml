@@ -10,77 +10,90 @@ env:
   CARGO_TERM_COLOR: always
   # 強制 Cargo 在所有步驟中皆使用系統 Git CLI，確保順利帶入私有庫存取憑證
   CARGO_NET_GIT_FETCH_WITH_CLI: true
-  CROSS_REMOTE_USER_CONFIG: true
 
 permissions:
   contents: write
 
 jobs:
   build_and_upload:
+    name: Build for ${{ matrix.target }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - x86_64-unknown-linux-gnu
+          - aarch64-unknown-linux-gnu
+          - aarch64-apple-darwin
+          - x86_64-pc-windows-gnu
 
     steps:
-    - uses: actions/checkout@v4
-    
-    
-    - name: Install All Linux System C Dependencies
+    - uses: actions/checkout@v6
+
+    # 1. 根據不同平台，安裝 Ubuntu 主機所需的系統依賴與 C 語言套件
+    - name: Install System Dependencies (Linux Native & Cross)
+      if: matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'aarch64-unknown-linux-gnu'
       run: |
         sudo apt-get update
         sudo apt-get install -y \
           build-essential \
           pkg-config \
+          libssl-dev \
+          libglib2.0-dev \
           libgtk-3-dev \
           libjavascriptcoregtk-4.1-dev \
           libwebkit2gtk-4.1-dev
-        sudo apt-get update
-        sudo apt-get -y install pkg-config libssl-dev
 
-    - name: Install System Dependencies (GLib)
+    # 2. 如果目標是 aarch64-linux，額外安裝對應架構的 C 語言函式庫與設定 pkg-config
+    - name: Install aarch64 C Libraries
+      if: matrix.target == 'aarch64-unknown-linux-gnu'
       run: |
+        sudo dpkg --add-architecture arm64
         sudo apt-get update
-        sudo apt-get install -y pkg-config libglib2.0-dev
+        sudo apt-get install -y \
+          libssl-dev:arm64 \
+          libglib2.0-dev:arm64 \
+          libgtk-3-dev:arm64 \
+          libjavascriptcoregtk-4.1-dev:arm64 \
+          libwebkit2gtk-4.1-dev:arm64
+        # 讓 pkg-config 能夠正確導向 arm64 的設定檔目錄
+        echo "PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig" >> $GITHUB_ENV
+        echo "PKG_CONFIG_ALLOW_CROSS=1" >> $GITHUB_ENV
 
-    - name: Install GTK3 and System Tools
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y pkg-config libgtk-3-dev
-        
+    # 3. 安裝與設定 Rust 工具鏈
     - name: Set up Rust Toolchain
       uses: dtolnay/rust-toolchain@nightly
+      with:
+        targets: ${{ matrix.target }}
     
+    # 4. 自動設定交叉編譯工具鏈（包含 taiki-e 動作，會自動處理 CARGO_BUILD_TARGET）
+    - name: Set up Cross-Compilation Toolchain
+      uses: taiki-e/setup-cross-toolchain-action@v1
+      with:
+        target: ${{ matrix.target }}
+        # 針對 macOS 帶入您指定的 SDK 版本
+        macos-sdk-version: ${{ matrix.target == 'aarch64-apple-darwin' && '11.0' || '' }}
+
     - name: Rust Cache
       uses: Swatinem/rust-cache@v2
       with:
-        # 當快取儲存失敗時不要讓整個 CI 壞掉
+        key: ${{ matrix.target }}
         continue-on-error: true
 
-    - name: Install Rust binaries
-      uses: taiki-e/install-action@v2
-      with:
-        tool: cargo-nextest, cargo-hack, cargo-cross
-    
     - name: Configure Git Credentials
       run: |
         git config --global credential.helper 'store'
         echo "https://x-access-token:${{ secrets.NDCODE3_PAT }}@github.com" > ~/.git-credentials
-        
-    #- name: Run tests
-    #  run: cargo test --verbose
-    
-    - name: Build Linux
-      run: cargo cross build --targets x86_64-unknown-linux-gnu,aarch64-unknown-linux-gnu --verbose --release
 
-    - name: Build MacOS
-      run: cargo cross build --target aarch64-apple-darwin --macos-sdk-version 11.0 --verbose --release
+    # 5. 執行編譯（setup-cross-toolchain-action 已自動帶入目標平台，直接 cargo build 即可）
+    - name: Build Binary
+      run: cargo build --verbose --release
 
-    - name: Build Windows
-      run: cargo cross build --target x86_64-pc-windows-gnu --verbose --release
-
-    # 將上傳步驟整合進同一個環境中，這樣才能順利抓到產出的 ./target/release/ 檔案
+    # 6. 上傳該平台的 Artifact
     - name: Upload a Build Artifact
-      uses: actions/upload-artifact@v7.0.1  # 建議使用穩定版 v4，或依你需求指定舊版
+      uses: actions/upload-artifact@v7.0.1
       with:
-        name: NTORS-Release-Builds
+        name: NTORS-Release-${{ matrix.target }}
         path: |
           ./target/**/release/NTORS*
         include-hidden-files: true
