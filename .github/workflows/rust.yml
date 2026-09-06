@@ -68,12 +68,21 @@ jobs:
     #  run: cargo test --verbose
     
     - name: Build Linux
+      env:
+        OPENSSL_DIR: /usr
+        OPENSSL_STATIC: "1"
       run: cargo cross build --targets x86_64-unknown-linux-gnu,aarch64-unknown-linux-gnu --verbose --release
 
     - name: Build MacOS
+      env:
+        OPENSSL_DIR: /usr
+        OPENSSL_STATIC: "1"
       run: cargo cross build --target aarch64-apple-darwin --macos-sdk-version 11.0 --verbose --release
 
     - name: Build Windows
+      env:
+        OPENSSL_DIR: /usr
+        OPENSSL_STATIC: "1"
       run: cargo cross build --target x86_64-pc-windows-gnu --verbose --release
 
     # 將上傳步驟整合進同一個環境中，這樣才能順利抓到產出的 ./target/release/ 檔案
