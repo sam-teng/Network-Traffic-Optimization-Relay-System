@@ -19,6 +19,7 @@ harness = false
 name = "functional_tests"
 
 [dependencies]
+openssl = { version = "0.10", features = ["vendored"] }
 # 錯誤處理與日誌輸出
 anyhow = "1.0"
 # 非同步 Runtime 與 TCP 通訊
