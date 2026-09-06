@@ -32,7 +32,7 @@ jobs:
 
     # 1. 根據不同平台，安裝 Ubuntu 主機所需的系統依賴與 C 語言套件
     - name: Install System Dependencies (Linux Native & Cross)
-      if: matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'aarch64-unknown-linux-gnu'
+      if: matrix.target == 'x86_64-unknown-linux-gnu'
       run: |
         sudo apt-get update
         sudo apt-get install -y \
