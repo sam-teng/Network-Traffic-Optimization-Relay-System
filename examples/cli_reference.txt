@@ -1,0 +1,27 @@
+# NTORS 完整參數參考
+# 執行 NTORS --help 可查看最新說明
+
+# ===== 基本題目 =====
+NTORS.exe -m, --mode <client|server>        # 運行模式 (預設 client)
+NTORS.exe -s, --server-addr <ADDR>          # [Client] 遠端伺服器位址 (預設 127.0.0.1:8080)
+NTORS.exe -l, --listen-addr <ADDR>          # [Server] 本機監聽位址 (預設 0.0.0.0:8080)
+
+# ===== TUN 虛擬網卡 =====
+NTORS.exe --tun-name <NAME>                 # TUN 網卡名稱 (預設 tun0)
+NTORS.exe --tun-ip <IP>                     # TUN 網卡 IP (預設 10.0.0.1)
+NTORS.exe --tun-netmask <MASK>              # TUN 子網路遮罩 (預設 255.255.255.0)
+NTORS.exe --tun-gateway <IP>                # TUN 對端閘道 (預設 10.0.0.1)
+NTORS.exe --tun-route <default|CIDR>        # 路由進 TUN 的目標 (預設 default)
+NTORS.exe --enable-route <true|false>       # 套用 OS 路由表修改 (預設 true)
+NTORS.exe --auto-elevate                    # Windows 非管理員時自動 UAC 重新啟動
+
+# ===== 純連線端模式 =====
+NTORS.exe --standalone                      # 不用中繼伺服器，雙端皆 Client
+NTORS.exe --scope <http|http-https|all>     # 串流壓縮涵蓋範圍 (預設 http)
+
+# ===== TLS/SSL =====
+NTORS.exe --tls                             # 啟用 TLS 加密傳輸
+NTORS.exe --tls-cert <PEM>                  # [Server] 憑證檔 (選擇性，否則自動自簽)
+NTORS.exe --tls-key <PEM>                   # [Server] 私鑰檔
+NTORS.exe --tls-ca <PEM>                    # [Client] 信任的伺服器憑證
+NTORS.exe --tls-insecure                    # [Client] 跳過憑證驗證 (HMAC 仍驗證身份)

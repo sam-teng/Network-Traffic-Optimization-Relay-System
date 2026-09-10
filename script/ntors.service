@@ -1,0 +1,19 @@
+[Unit]
+Description=Network Traffic Optimization & Relay System
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/ntors
+ExecStart=./bin/ntors_server
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+
+# setup ntors service
+# sudo ln -s /opt/ntors/script/ntors.service /etc/systemd/system/ntors.service
+# sudo systemctl daemon-reload
+# sudo systemctl enable --now ntors

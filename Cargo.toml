@@ -1,0 +1,59 @@
+[package]
+name = "NTORS"
+version = "0.0.0-NDcode3"
+edition = "2024"
+
+[lib]
+name = "ntors"
+path = "src/lib.rs"
+
+[[bin]]
+name = "NTORS"
+path = "src/main.rs"
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+rand = "0.8"
+
+[[bench]]
+name = "engine_bench"
+harness = false
+
+[[test]]
+name = "functional_tests"
+
+[dependencies]
+# 錯誤處理與日誌輸出
+anyhow = "1.0"
+# 非同步 Runtime 與 TCP 通訊
+tokio = { version = "1.38", features = ["full"] }
+# Layer 3 虛擬網卡
+tun = { version = "0.6", features = ["async"] }
+# 命令列參數解析
+clap = { version = "4.5", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+hmac = "0.12"
+sha2 = "0.10"
+rand = "0.8"
+# NDcode3 核心引擎（路徑相依；核心程式碼未隨本倉庫發佈，需自行放置於 NDcode3/ 目錄）
+NDcode3 = { path = "NDcode3", features = ["xz2"] }
+
+# TLS/SSL 加密傳輸 (rustls + ring，純 Rust 免 OpenSSL)
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
+rustls-pemfile = "2.2"
+rcgen = "0.14"
+
+# 高效能發行版 (適用於 PC / 樹莓派 / 行動端，開啟最大 SIMD 與 LTO 自動向量化)
+[profile.release]
+opt-level = 3       # 設為 3 以啟動 LLVM SIMD 向量化與迴圈展開
+lto = "fat"         # 全域跨 Crate 鏈接優化
+codegen-units = 1   # 提高向量指令生成品質
+strip = true        # 剝離 Debug 符號
+panic = "abort"     # 移除 Unwind 棧，減小極限體積
+
+# 嵌入式 MCU / 極限體積發行版 (透過 cargo build --profile release-small 呼叫)
+[profile.release-small]
+inherits = "release"
+opt-level = "z"     # 專注於代碼最小化
