@@ -11,6 +11,7 @@ use config::{AppConfig, RunningMode};
 use disclaimer::print_and_confirm_disclaimer;
 use ntors::ndcode_tun_engine::NDcodeTunEngine;
 use ntors::pipeline::{self, NDcodePipeline};
+use ntors::traffic_meter::{CountingReader, CountingSocket, CountingWriter, TrafficMeter};
 
 use anyhow::{Context, Result};
 use std::env;
@@ -112,6 +113,7 @@ async fn main() -> Result<()> {
 
     let tun = SharedTun::new(dev);
     let engine = Arc::new(NDcodeTunEngine::new());
+    let traffic = Arc::new(TrafficMeter::new());
 
     // 建立隧道路由 (Client 才需要；Server 純轉發不搶路由)
     if config.mode == RunningMode::Client {
@@ -126,8 +128,8 @@ async fn main() -> Result<()> {
     }
 
     match config.mode {
-        RunningMode::Client => run_client_mode(config, engine, tun.clone(), tun).await?,
-        RunningMode::Server => run_server_mode(config, engine).await?,
+        RunningMode::Client => run_client_mode(config, engine, tun.clone(), tun, traffic.clone()).await?,
+        RunningMode::Server => run_server_mode(config, engine, traffic.clone()).await?,
     }
 
     Ok(())
@@ -315,11 +317,24 @@ fn prompt_choice(label: &str, choices: &[&str]) -> Result<usize> {
     }
 }
 
+/// 定期輸出流量統計摘要 (僅在 --traffic-stats 啟用時呼叫)。
+fn spawn_traffic_display(traffic: Arc<TrafficMeter>, interval_secs: u64) {
+    tokio::spawn(async move {
+        let mut timer = tokio::time::interval(std::time::Duration::from_secs(interval_secs.max(1)));
+        timer.tick().await; // 略過首次立即 tick，等待第一週期
+        loop {
+            timer.tick().await;
+            println!("{}", traffic.display());
+        }
+    });
+}
+
 async fn run_client_mode<R, W>(
     config: AppConfig,
     engine: Arc<NDcodeTunEngine>,
     tun_reader: R,
     tun_writer: W,
+    traffic: Arc<TrafficMeter>,
 ) -> Result<()>
 where
     R: tokio::io::AsyncRead + Unpin + Send + 'static + Clone,
@@ -327,12 +342,20 @@ where
 {
     println!("📡 [Client] 連線至 Server: {}", config.server_addr);
 
+    if config.traffic_stats {
+        println!(
+            "📊 [Client] 流量統計顯示已啟用 (每 {} 秒輸出一次)",
+            config.traffic_interval
+        );
+        spawn_traffic_display(traffic.clone(), config.traffic_interval);
+    }
+
     // 永久重連迴圈：TCP 斷線/EOF 後自動重新連線，維持 VPN 常駐
     let mut attempt = 0u32;
     loop {
         let tun_rd = tun_reader.clone();
         let tun_wr = tun_writer.clone();
-        match run_client_connection(&config, &engine, tun_rd, tun_wr).await {
+        match run_client_connection(&config, &engine, &traffic, tun_rd, tun_wr).await {
             Ok(()) => {
                 println!("⚠️ [Client] 連線已結束 (server 關閉連線)，2 秒後重連...");
             }
@@ -350,6 +373,7 @@ where
 async fn run_client_connection<R, W>(
     config: &AppConfig,
     engine: &Arc<NDcodeTunEngine>,
+    traffic: &Arc<TrafficMeter>,
     tun_reader: R,
     tun_writer: W,
 ) -> Result<()>
@@ -401,6 +425,7 @@ where
             println!("✅ [Client] 連線成功！雙向平行管線運作中 (TLS 加密)");
 
             if config.standalone {
+                let conn = CountingSocket::new(conn, traffic.clone());
                 let self_transport =
                     NDcodePipeline::spawn_self_transport_pipeline(tun_reader, tun_writer, conn, engine.clone());
                 self_transport.await?;
@@ -408,6 +433,8 @@ where
             }
 
             let (read, write) = tokio::io::split(conn);
+            let read = CountingReader::new(read, traffic.clone());
+            let write = CountingWriter::new(write, traffic.clone());
             let upstream = NDcodePipeline::spawn_upstream_pipeline(
                 tun_reader,
                 write,
@@ -449,6 +476,7 @@ where
             "⚡ [Client::Standalone] 連線端自帶傳輸編解碼就緒 (上傳+下載皆透過 TransportCodec)"
         );
 
+        let socket = CountingSocket::new(socket, traffic.clone());
         let self_transport =
             NDcodePipeline::spawn_self_transport_pipeline(tun_reader, tun_writer, socket, engine.clone());
         self_transport.await?;
@@ -456,6 +484,9 @@ where
     }
 
     let (tcp_read, tcp_write) = socket.into_split();
+
+    let tcp_read = CountingReader::new(tcp_read, traffic.clone());
+    let tcp_write = CountingWriter::new(tcp_write, traffic.clone());
 
     let upstream = NDcodePipeline::spawn_upstream_pipeline(
         tun_reader,
@@ -478,13 +509,20 @@ where
     Ok(())
 }
 
-async fn run_server_mode(config: AppConfig, engine: Arc<NDcodeTunEngine>) -> Result<()> {
+async fn run_server_mode(config: AppConfig, engine: Arc<NDcodeTunEngine>, traffic: Arc<TrafficMeter>) -> Result<()> {
     let listener = TcpListener::bind(&config.listen_addr)
         .await
         .context("無法綁定 Server 監聽埠")?;
     println!("🌐 [Server] 伺服端已啟動，監聽於: {}", config.listen_addr);
     if config.standalone {
         eprintln!("⚠️ [Server] --standalone/--scope 在 server 模式下被忽略 (server 僅解碼後 sink，未寫回 TUN)");
+    }
+    if config.traffic_stats {
+        println!(
+            "📊 [Server] 流量統計顯示已啟用 (每 {} 秒輸出一次)",
+            config.traffic_interval
+        );
+        spawn_traffic_display(traffic.clone(), config.traffic_interval);
     }
 
 let key_mgr = Arc::new(pipeline::key_manager::DynamicKeyManager::new(
@@ -521,6 +559,7 @@ let key_mgr = Arc::new(pipeline::key_manager::DynamicKeyManager::new(
         let obfuscator_clone = obfuscator.clone();
         let mesh_engine_clone = mesh_engine.clone();
         let server_tls_clone = server_tls.clone();
+        let traffic_clone = traffic.clone();
 
         tokio::spawn(async move {
             // 若啟用 TLS：先完成 TLS 握手再進行 HMAC 驗證
@@ -548,6 +587,7 @@ let key_mgr = Arc::new(pipeline::key_manager::DynamicKeyManager::new(
 
                 if config.standalone {
                     println!("⚡ [Server::Standalone] 對稱連線端自帶傳輸編解碼 (TLS)");
+                    let conn = CountingSocket::new(conn, traffic_clone.clone());
                     let _ = NDcodePipeline::spawn_self_transport_pipeline(
                         tokio::io::empty(),
                         tokio::io::sink(),
@@ -559,6 +599,7 @@ let key_mgr = Arc::new(pipeline::key_manager::DynamicKeyManager::new(
                 }
 
                 let (read, _write) = tokio::io::split(conn);
+                let read = CountingReader::new(read, traffic_clone.clone());
                 let _ = NDcodePipeline::spawn_downstream_pipeline(
                     read,
                     tokio::io::sink(),
@@ -585,6 +626,7 @@ let key_mgr = Arc::new(pipeline::key_manager::DynamicKeyManager::new(
                 // 純連線端 server：與對端同一套 TransportCodec 對稱
                 // 此端為 sink 端：peer 寫來的封包自動解碼後丟棄 (驗證/統計用途)
                 println!("⚡ [Server::Standalone] 對稱連線端自帶傳輸編解碼");
+                let socket = CountingSocket::new(socket, traffic_clone.clone());
                 let _ = NDcodePipeline::spawn_self_transport_pipeline(
                     tokio::io::empty(),
                     tokio::io::sink(),
@@ -596,6 +638,7 @@ let key_mgr = Arc::new(pipeline::key_manager::DynamicKeyManager::new(
             }
 
             let (tcp_read, _tcp_write) = socket.into_split();
+            let tcp_read = CountingReader::new(tcp_read, traffic_clone.clone());
             let _ = NDcodePipeline::spawn_downstream_pipeline(
                 tcp_read,
                 tokio::io::sink(),

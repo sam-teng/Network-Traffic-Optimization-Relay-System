@@ -112,6 +112,14 @@ pub struct AppConfig {
     /// [Client] 跳過 TLS 憑證驗證 (身份仍由 HMAC 握手確認)
     #[arg(long, default_value_t = false)]
     pub tls_insecure: bool,
+
+    /// 啟用即時流量統計顯示 (每 traffic-interval 秒於 stdout 輸出一次累計/速率)
+    #[arg(long, default_value_t = false)]
+    pub traffic_stats: bool,
+
+    /// 流量統計顯示間隔秒數 (預設 10 秒；最小值 1)
+    #[arg(long, default_value_t = 10)]
+    pub traffic_interval: u64,
 }
 
 impl AppConfig {
@@ -220,6 +228,15 @@ impl AppConfig {
             if file_cfg.tls_insecure.unwrap_or(false) && !cli_gave("tls_insecure") {
                 cfg.tls_insecure = true;
             }
+            // 流量統計：檔案 flag 與間隔值套用(CLI 未明確給出時)
+            if file_cfg.traffic_stats.unwrap_or(false) && !cli_gave("traffic_stats") {
+                cfg.traffic_stats = true;
+            }
+            if !cli_gave("traffic_interval") {
+                if let Some(iv) = file_cfg.traffic_interval {
+                    cfg.traffic_interval = iv.max(1);
+                }
+            }
         }
         cfg
     }
@@ -244,6 +261,8 @@ struct ConfigFile {
     tls_key: Option<String>,
     tls_ca: Option<String>,
     tls_insecure: Option<bool>,
+    traffic_stats: Option<bool>,
+    traffic_interval: Option<u64>,
 }
 
 fn load_config_file() -> Option<ConfigFile> {

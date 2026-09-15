@@ -193,6 +193,8 @@ sudo ./target/release/NTORS --mode client --server-addr <SERVER_IP>:8080 --tls -
 | `--tls-key <PEM>` | [Server] TLS 私鑰檔 | - |
 | `--tls-ca <PEM>` | [Client] 可信任的伺服器憑證 | - |
 | `--tls-insecure` | [Client] 跳過 TLS 憑證驗證 | `false` |
+| `--traffic-stats` | 啟用即時流量統計顯示 (見 `src/traffic_meter.rs`) | `false` |
+| `--traffic-interval <SEC>` | 流量統計輸出間隔秒數 | `10` |
 | `--auto-elevate` | Windows 非管理員時自動 UAC 重新啟動 | `false` |
 | `--setup` | 進入互動式設定嚮導 | - |
 

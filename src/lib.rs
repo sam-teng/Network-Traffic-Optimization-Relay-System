@@ -4,6 +4,7 @@
 pub mod ndcode_tun_engine;
 pub mod net_transport;
 pub mod tls;
+pub mod traffic_meter;
 pub mod wasm_tunnel;
 #[path = "pipeline/mod.rs"]
 pub mod pipeline;
