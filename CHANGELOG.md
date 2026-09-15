@@ -5,7 +5,7 @@
 ## [0.0.0-NDcode3-beta.6] - 2026-09-16
 
 ### 新增
-- CI 新增 Debug (dev profile) 建置：matrix 擴展為 release + dev × 5 個目標，共 10 個 job，artifact 按 `NTORS-<profile>-<target>` 分名上傳
+- CI 對 windows / macos / linux 三大平台皆實施 Debug (dev profile) 與 Release 建置：`release + dev × 5 個目標` 共 10 個 job；windows、linux 於 `ubuntu-latest` 交叉編譯，macOS 於 `macos-latest` 原生編譯，artifact 按 `NTORS-<profile>-<target>` 分名上傳
 - README 用詞統一：設定嚮導 → 設定精靈、非法資料拒絕 → 阻絕、運行 → 執行
 
 ### 變更

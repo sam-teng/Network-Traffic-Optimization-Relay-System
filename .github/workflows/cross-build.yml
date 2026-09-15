@@ -19,28 +19,34 @@ permissions:
 
 jobs:
   cross_build:
-    name: Build (${{ matrix.target }}, ${{ matrix.profile == 'dev' && 'Debug' || 'Release' }})
+    name: Build (${{ matrix.os }}, ${{ matrix.profile == 'dev' && 'Debug' || 'Release' }})
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         profile: [release, dev]
         include:
-          # Linux / Windows：ubuntu-latest + cargo-cross 交叉編譯
-          - target: x86_64-unknown-linux-musl
+          # Linux：ubuntu-latest + cargo-cross 交叉編譯 (Debug/Release)
+          - os: Linux
+            target: x86_64-unknown-linux-musl
             runner: ubuntu-latest
             cross: true
-          - target: aarch64-unknown-linux-musl
+          - os: Linux
+            target: aarch64-unknown-linux-musl
             runner: ubuntu-latest
             cross: true
-          - target: x86_64-pc-windows-gnu
+          # Windows：ubuntu-latest + cargo-cross 交叉編譯 (Debug/Release)
+          - os: Windows
+            target: x86_64-pc-windows-gnu
             runner: ubuntu-latest
             cross: true
-          # macOS：macos-latest 原生編譯 (cargo-cross 不支援 Apple 平台)
-          - target: x86_64-apple-darwin
+          # macOS：macos-latest 原生編譯 (Debug/Release)
+          - os: macOS
+            target: x86_64-apple-darwin
             runner: macos-latest
             cross: false
-          - target: aarch64-apple-darwin
+          - os: macOS
+            target: aarch64-apple-darwin
             runner: macos-latest
             cross: false
 
