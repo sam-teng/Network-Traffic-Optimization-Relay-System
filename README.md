@@ -229,7 +229,7 @@ sudo ./target/release/NTORS --mode client --server-addr <SERVER_IP>:8080 --tls -
 
 ### 沙盒防護 (Sandbox Hardening)
 - **記憶體上限 2 MiB**（`StoreLimits` + 記憶體 max 32 頁）與 **CPU fuel 預算 500,000 op**（耗盡即 trap）。
-- **輸出上限 1 MiB**；僅接受**二進位 .wasm**（阻絕 WAT 文字格式）且 **≤256 KiB**；禁用 `start` 函式。
+- **輸出上限 1 MiB**；僅接受**二進位 .wasm**（不允許 WAT 文字格式）且 **≤256 KiB**；禁用 `start` 函式。
 - `EnforcedLimits::strict()`；每次執行於全新 Store 實例化，返回前將沙盒記憶體清零。
 - 1 GiB 專用執行緒 stack，保證 fuel trap 恆先於宿主 stack 溢位；同時至多 4 個沙盒執行緒並行（全域號誌）。
 - 註冊表上限 1024 個 session；解壓失敗自動 `uninstall(conn_id)`。
