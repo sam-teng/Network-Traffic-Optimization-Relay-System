@@ -19,11 +19,12 @@ permissions:
 
 jobs:
   cross_build:
-    name: Build (${{ matrix.target }})
+    name: Build (${{ matrix.target }}, ${{ matrix.profile == 'dev' && 'Debug' || 'Release' }})
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
+        profile: [release, dev]
         include:
           # Linux / Windows：ubuntu-latest + cargo-cross 交叉編譯
           - target: x86_64-unknown-linux-musl
@@ -84,18 +85,18 @@ jobs:
           cross-make-version: v0.7.7
           build-std: true
           toolchain: nightly
-          profile: release
+          profile: ${{ matrix.profile }}
 
       - name: Build native macOS target
         if: matrix.cross == false
         shell: bash
-        run: cargo +nightly build --release --target ${{ matrix.target }}
+        run: cargo +nightly build --profile ${{ matrix.profile }} --target ${{ matrix.target }}
 
       - name: Upload a Build Artifact
         uses: actions/upload-artifact@v7.0.1
         with:
-          name: NTORS-${{ matrix.target }}
+          name: NTORS-${{ matrix.profile }}-${{ matrix.target }}
           path: |
-            ./target/**/release/NTORS*
+            ./target/**/${{ matrix.profile == 'dev' && 'debug' || 'release' }}/NTORS*
           include-hidden-files: true
           if-no-files-found: warn

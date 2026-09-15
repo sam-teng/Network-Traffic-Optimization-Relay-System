@@ -49,7 +49,7 @@ NDcode 3 內建以下安全架構入口：
 
 ### 純連線端串流壓縮 (Standalone / 雙端皆 Client)
 
-本模式**不需要中繼伺服器**，兩個端點皆以 `--mode client --standalone` 運行，透過 TCP 直接配對。下載流量在 TUN 層被分類並串流壓縮。
+本模式**不需要中繼伺服器**，兩個端點皆以 `--mode client --standalone` 執行，透過 TCP 直接配對。下載流量在 TUN 層被分類並串流壓縮。
 
 ```text
 [ 用戶端 A TUN (Layer 3) ]                  [ 用戶端 B TUN (Layer 3) ]
@@ -143,8 +143,8 @@ cargo +nightly test --bin NTORS
 > - [`cli_reference.txt`](examples/cli_reference.txt) — 完整參數參考
 > - [`ndcode_config.example.json`](examples/ndcode_config.example.json) — 設定檔範例
 
-### 互動式設定嚮導
-首次執行（或不存在 `ndcode_config.json` 時）會自動進入跨平台互動式設定嚮導，或手動指定：
+### 互動式設定精靈
+首次執行（或不存在 `ndcode_config.json` 時）會自動進入跨平台互動式設定精靈，或手動指定：
 ```bash
 sudo ./target/release/NTORS --setup
 ```
@@ -180,7 +180,7 @@ sudo ./target/release/NTORS --mode client --server-addr <SERVER_IP>:8080 --tls -
 ### 完整參數 (CLI Reference)
 | 參數 | 說明 | 預設值 |
 | :--- | :--- | :--- |
-| `-m, --mode <client\|server>` | 運行模式 | `client` |
+| `-m, --mode <client\|server>` | 執行模式 | `client` |
 | `-s, --server-addr <ADDR>` | [Client] 遠端位址 | `127.0.0.1:8080` |
 | `-l, --listen-addr <ADDR>` | [Server] 監聽位址 | `0.0.0.0:8080` |
 | `--tun-name <NAME>` | TUN 虛擬網卡名稱 | `tun0` |
@@ -196,7 +196,7 @@ sudo ./target/release/NTORS --mode client --server-addr <SERVER_IP>:8080 --tls -
 | `--traffic-stats` | 啟用即時流量統計顯示 (見 `src/traffic_meter.rs`) | `false` |
 | `--traffic-interval <SEC>` | 流量統計輸出間隔秒數 | `10` |
 | `--auto-elevate` | Windows 非管理員時自動 UAC 重新啟動 | `false` |
-| `--setup` | 進入互動式設定嚮導 | - |
+| `--setup` | 進入互動式設定精靈 | - |
 
 **說明**：
 - `--scope all` 為最後階段預留介面，尚未實作。
@@ -229,7 +229,7 @@ sudo ./target/release/NTORS --mode client --server-addr <SERVER_IP>:8080 --tls -
 
 ### 沙盒防護 (Sandbox Hardening)
 - **記憶體上限 2 MiB**（`StoreLimits` + 記憶體 max 32 頁）與 **CPU fuel 預算 500,000 op**（耗盡即 trap）。
-- **輸出上限 1 MiB**；僅接受**二進位 .wasm**（拒絕 WAT 文字格式）且 **≤256 KiB**；禁用 `start` 函式。
+- **輸出上限 1 MiB**；僅接受**二進位 .wasm**（阻絕 WAT 文字格式）且 **≤256 KiB**；禁用 `start` 函式。
 - `EnforcedLimits::strict()`；每次執行於全新 Store 實例化，返回前將沙盒記憶體清零。
 - 1 GiB 專用執行緒 stack，保證 fuel trap 恆先於宿主 stack 溢位；同時至多 4 個沙盒執行緒並行（全域號誌）。
 - 註冊表上限 1024 個 session；解壓失敗自動 `uninstall(conn_id)`。
@@ -265,7 +265,7 @@ NAT / relay 環境常見瓶頸為 OS 網路緩衝。本專案可自動調整：
 - **macOS**: `sysctl net.inet.tcp.sendspace/recvspace`。
 - **Windows**: `netsh interface tcp set global autotuninglevel=normal`。
 
-多半由互動式設定嚮導自動完成，亦可於執行時手動確認。
+多半由互動式設定精靈自動完成，亦可於執行時手動確認。
 
 ---
 
@@ -273,13 +273,13 @@ NAT / relay 環境常見瓶頸為 OS 網路緩衝。本專案可自動調整：
 
 內建單元測試涵蓋：
 - 訊框封裝 / 解封（含截斷尾端丟棄、空封包跳過）。
-- **Frame 長度防護**：越界 / 零長度長度前綴拒絕（`MAX_FRAME_LEN`，防止 OOM）。
+- **Frame 長度防護**：越界 / 零長度長度前綴阻絕（`MAX_FRAME_LEN`，防止 OOM）。
 - XZ 串流往返 (roundtrip)。
 - Adaptive 串流（熵值切換引擎）往返。
 - **NDcode3 連鎖編碼串流** 往返（`ENGINE_TAG_NDCODE3`）。
 - 流量分類（HTTP / HTTPS / 非 IPv4 / 其他 UDP / TCP FIN 偵測）。
-- TLS/SSL：真實握手雙向傳送、錯誤 CA 拒絕、insecure 連線。
-- 套件封裝 header 校驗與非法資料拒絕。
+- TLS/SSL：真實握手雙向傳送、錯誤 CA 阻絕、insecure 連線。
+- 套件封裝 header 校驗與非法資料阻絕。
 
 ```bash
 cargo +nightly test --bin NTORS        # 23 bin 測試

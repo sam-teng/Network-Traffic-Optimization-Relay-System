@@ -4,6 +4,10 @@
 
 ## [0.0.0-NDcode3-beta.6] - 2026-09-16
 
+### 新增
+- CI 新增 Debug (dev profile) 建置：matrix 擴展為 release + dev × 5 個目標，共 10 個 job，artifact 按 `NTORS-<profile>-<target>` 分名上傳
+- README 用詞統一：設定嚮導 → 設定精靈、非法資料拒絕 → 阻絕、運行 → 執行
+
 ### 變更
 - NDcode3 核心引擎相依由 `path = "NDcode3"` 改為 `git = "https://github.com/sam-teng/NDcode3.git"`,核心程式碼改由獨立儲存庫提供
 - 版本號同步為 `0.0.0-NDcode3-beta.6`,並新增本 CHANGELOG
