@@ -1,0 +1,59 @@
+name: Cross Build NTORS Static Binaries
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - 'v*'
+      - 'V*'
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  # 強制 Cargo 在所有步驟中皆使用系統 Git CLI，確保順利帶入私有庫存取憑證 (NDcode3)
+  CARGO_NET_GIT_FETCH_WITH_CLI: true
+
+permissions:
+  contents: read
+
+jobs:
+  cross_build:
+    name: Cross build (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - x86_64-unknown-linux-musl
+          - aarch64-unknown-linux-musl
+          - x86_64-pc-windows-gnu
+          - x86_64-apple-darwin
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Configure Git Credentials
+        run: |
+          git config --global credential.helper 'store'
+          echo "https://x-access-token:${{ secrets.NDCODE3_PAT }}@github.com" > ~/.git-credentials
+
+      - name: Cross compile
+        uses: zijiren233/cargo-cross@v1
+        with:
+          command: build
+          targets: ${{ matrix.target }}
+          cross-make-version: v0.7.7
+          build-std: true
+          toolchain: nightly
+          args: --release
+
+      - name: Upload a Build Artifact
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: NTORS-Cross-${{ matrix.target }}
+          path: |
+            ./target/**/release/NTORS*
+          include-hidden-files: true
+          if-no-files-found: warn
