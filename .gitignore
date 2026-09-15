@@ -8,3 +8,6 @@
 *.pdb
 *.exp
 *.lib
+
+# 本機執行環境設定（互動式精靈產生，內含端點設定，不納入版控）
+/ndcode_config.json

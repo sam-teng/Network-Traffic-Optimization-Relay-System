@@ -14,6 +14,8 @@ path = "src/main.rs"
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
 rand = "0.8"
+# 測試用：將 WAT 原始碼編譯為二進位 .wasm（僅 dev，不進發佈二進位）
+wat = "1"
 
 [[bench]]
 name = "engine_bench"
@@ -38,6 +40,9 @@ sha2 = "0.10"
 rand = "0.8"
 # NDcode3 核心引擎（路徑相依；核心程式碼未隨本倉庫發佈，需自行放置於 NDcode3/ 目錄）
 NDcode3 = { path = "NDcode3", features = ["xz2"] }
+# Wasm 沙盒隧道（選項 B：Code-as-Data 解壓縮引擎，純 Rust 解譯器，支援記憶體/CPU fuel 限制）
+# 關閉 default features 以排除 wat 文字解析器，縮小發佈體積；僅允許二進位 .wasm 上傳
+wasmi = { version = "2.0", default-features = false, features = ["std"] }
 
 # TLS/SSL 加密傳輸 (rustls + ring，純 Rust 免 OpenSSL)
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }

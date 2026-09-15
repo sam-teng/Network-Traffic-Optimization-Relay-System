@@ -221,6 +221,40 @@ sudo ./target/release/NTORS --mode client --server-addr <SERVER_IP>:8080 --tls -
 
 ---
 
+## 🧩 Wasm 沙盒解壓隧道 (Code-as-Data Decompression)
+
+連線握手階段由 Client 上傳 `decompress.wasm`（二進位 WebAssembly），接收端將其放入 **wasmi 2.0 跨平台沙盒**執行以解開資料框；沙盒與 `conn_id` 綁定，連線關閉即自動卸載並抹除。可於中繼 / 雙端間彈性分攤解壓運算，並隔離不可信程式碼（Cargo 相依見 `src/wasm_tunnel.rs`）。
+
+### 沙盒防護 (Sandbox Hardening)
+- **記憶體上限 2 MiB**（`StoreLimits` + 記憶體 max 32 頁）與 **CPU fuel 預算 500,000 op**（耗盡即 trap）。
+- **輸出上限 1 MiB**；僅接受**二進位 .wasm**（拒絕 WAT 文字格式）且 **≤256 KiB**；禁用 `start` 函式。
+- `EnforcedLimits::strict()`；每次執行於全新 Store 實例化，返回前將沙盒記憶體清零。
+- 1 GiB 專用執行緒 stack，保證 fuel trap 恆先於宿主 stack 溢位；同時至多 4 個沙盒執行緒並行（全域號誌）。
+- 註冊表上限 1024 個 session；解壓失敗自動 `uninstall(conn_id)`。
+
+### Wire 框格式 (Tunnel Frame)
+```text
+[0x57] [kind u8] [conn_id u64 (LE)] [body_len u32 (LE)] [body...]
+```
+| 欄位 | 大小 | 說明 |
+| :--- | :---: | :--- |
+| 魔數 | 1 byte | `0x57` |
+| `kind` | 1 byte | `0x27` = 握手（body 為 `decompress.wasm` 二進位）、`0x21` = 資料框 |
+| `conn_id` | 8 bytes | 連線 ID（綁定沙盒） |
+| `body_len` | 4 bytes | body 長度（LE） |
+| `body` | 可變 | 握手：wasm 二進位；資料：壓縮載荷 |
+
+### Guest ABI 契約
+Guest 必須 export：
+- `memory`（1~32 頁）
+- `decompress(in_ptr i32, in_len i32, out_ptr i32, out_cap i32) -> i32`
+  - 輸入緩衝固定位址 `0`；輸出緩衝固定位址 `0x100000`（1 MiB）。
+  - 回傳輸出長度，失敗回傳 `-1`。
+
+> 大量解壓建議使用 bulk 指令（`memory.fill` / `memory.copy`）或拆分段落，以降低逐位元組迴圈所消耗的 fuel / stack。
+
+---
+
 ## 效能調校 (Performance Tuning)
 
 NAT / relay 環境常見瓶頸為 OS 網路緩衝。本專案可自動調整：
