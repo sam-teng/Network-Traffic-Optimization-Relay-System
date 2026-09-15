@@ -13,6 +13,7 @@
 - 版本號同步為 `0.0.0-NDcode3-beta.6`,並新增本 CHANGELOG
 
 ### 修正
+- 修正 Windows (`x86_64-pc-windows-gnu`) 鏈接失敗 `export ordinal too large: 131415`：NDcode3 的 `crate-type` 移除 `cdylib`(不再產出 `.dll`)，避免 PE 匯出符號超過 65,535 上限；`Cargo.lock` 已重新鎖定 NDcode3 `8f1e293`
 - 修正 CI matrix 崩潰:偵測到 `profile: [release, dev]` 主軸與 `include`(os/target/runner)未對齊,依 GitHub include 規則後寫條目覆蓋先寫,導致只展開 `macOS × 2` 兩個 job;改以 `target` 同步為主軸(5×2=10 個組合),`include` 依 `target` 合併 `os/runner/cross` 額外鍵
 - 移除舊版 `.github/workflows/rust.yml`：其僅於 tag push 觸發、缺少 NDcode3 擷取 / wintun DLL / build-std 與 macOS 原生支援，與 `cross-build.yml` 重複並導致多個失敗 job
 - 修正 CI 的 `--release` 重複錯誤:改以 cargo-cross action 的 `profile: release`,移除手動 `cargo-args: --release`
