@@ -69,7 +69,7 @@ jobs:
           cross-make-version: v0.7.7
           build-std: true
           toolchain: nightly
-          cargo-args: --release
+          profile: release
 
       - name: Build native macOS target
         if: matrix.cross == false
