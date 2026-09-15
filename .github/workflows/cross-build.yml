@@ -54,6 +54,21 @@ jobs:
       - name: Fetch NDcode3 core engine (private, closed-source)
         run: git clone --depth 1 https://github.com/sam-teng/NDcode3.git NDcode3
 
+      - name: Fetch Wintun signed DLLs (Windows targets)
+        if: matrix.target == 'x86_64-pc-windows-gnu'
+        shell: bash
+        run: |
+          curl -fsSL https://www.wintun.net/builds/wintun-0.14.1.zip -o wintun.zip
+          echo "07c256185d6ee3652e09fa55c0b673e2624b565e02c4b9091c79ca7d2f24ef51  wintun.zip" | sha256sum -c -
+          rm -rf wintun-src && mkdir -p wintun-src
+          unzip -q wintun.zip -d wintun-src
+          mkdir -p assets/wintun/amd64 assets/wintun/arm64 assets/wintun/x86 assets/wintun/arm
+          cp wintun-src/wintun/bin/amd64/wintun.dll assets/wintun/amd64/wintun.dll
+          cp wintun-src/wintun/bin/arm64/wintun.dll assets/wintun/arm64/wintun.dll
+          cp wintun-src/wintun/bin/x86/wintun.dll assets/wintun/x86/wintun.dll
+          cp wintun-src/wintun/bin/arm/wintun.dll assets/wintun/arm/wintun.dll
+          rm -rf wintun.zip wintun-src
+
       - name: Install nightly toolchain (macOS)
         if: matrix.cross == false
         uses: dtolnay/rust-toolchain@nightly
