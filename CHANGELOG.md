@@ -13,6 +13,7 @@
 - 版本號同步為 `0.0.0-NDcode3-beta.6`,並新增本 CHANGELOG
 
 ### 修正
+- 移除舊版 `.github/workflows/rust.yml`：其僅於 tag push 觸發、缺少 NDcode3 擷取 / wintun DLL / build-std 與 macOS 原生支援，與 `cross-build.yml` 重複並導致多個失敗 job
 - 修正 CI 的 `--release` 重複錯誤:改以 cargo-cross action 的 `profile: release`,移除手動 `cargo-args: --release`
 - 修正 Windows 交叉編譯缺少 `assets/wintun/amd64/wintun.dll` 而無法嵌入:CI 於 `x86_64-pc-windows-gnu` 建置前自 wintun.net 下載官方簽署 DLL(wintun 0.14.1,並以 SHA-256 驗證)
 
