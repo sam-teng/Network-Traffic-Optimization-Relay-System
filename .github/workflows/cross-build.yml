@@ -25,28 +25,34 @@ jobs:
       fail-fast: false
       matrix:
         profile: [release, dev]
+        target:
+          - x86_64-unknown-linux-musl
+          - aarch64-unknown-linux-musl
+          - x86_64-pc-windows-gnu
+          - x86_64-apple-darwin
+          - aarch64-apple-darwin
         include:
-          # Linux：ubuntu-latest + cargo-cross 交叉編譯 (Debug/Release)
-          - os: Linux
-            target: x86_64-unknown-linux-musl
+          # Linux：ubuntu-latest + cargo-cross 交叉編譯 (對齊 target 主軸)
+          - target: x86_64-unknown-linux-musl
+            os: Linux
             runner: ubuntu-latest
             cross: true
-          - os: Linux
-            target: aarch64-unknown-linux-musl
+          - target: aarch64-unknown-linux-musl
+            os: Linux
             runner: ubuntu-latest
             cross: true
-          # Windows：ubuntu-latest + cargo-cross 交叉編譯 (Debug/Release)
-          - os: Windows
-            target: x86_64-pc-windows-gnu
+          # Windows：ubuntu-latest + cargo-cross 交叉編譯 (對齊 target 主軸)
+          - target: x86_64-pc-windows-gnu
+            os: Windows
             runner: ubuntu-latest
             cross: true
-          # macOS：macos-latest 原生編譯 (Debug/Release)
-          - os: macOS
-            target: x86_64-apple-darwin
+          # macOS：macos-latest 原生編譯 (對齊 target 主軸)
+          - target: x86_64-apple-darwin
+            os: macOS
             runner: macos-latest
             cross: false
-          - os: macOS
-            target: aarch64-apple-darwin
+          - target: aarch64-apple-darwin
+            os: macOS
             runner: macos-latest
             cross: false
 
