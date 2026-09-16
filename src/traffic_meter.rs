@@ -8,7 +8,7 @@
 use std::fmt;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
 
@@ -34,6 +34,8 @@ struct TrafficMeterInner {
     rx_bytes: AtomicU64,
     tx_packets: AtomicU64,
     rx_packets: AtomicU64,
+    // 區間流量基準點：(上次間隔取樣時間, 當時 tx, 當時 rx)
+    interval: Mutex<Option<(Instant, u64, u64)>>,
 }
 
 impl Default for TrafficMeter {
@@ -51,6 +53,7 @@ impl TrafficMeter {
                 rx_bytes: AtomicU64::new(0),
                 tx_packets: AtomicU64::new(0),
                 rx_packets: AtomicU64::new(0),
+                interval: Mutex::new(None),
             }),
         }
     }
@@ -91,6 +94,31 @@ impl TrafficMeter {
         self.inner.rx_packets.load(Ordering::Relaxed)
     }
 
+    /// 總流量 (上傳 + 下載位元組)。
+    pub fn total_bytes(&self) -> u64 {
+        self.inner.tx_bytes.load(Ordering::Relaxed) + self.inner.rx_bytes.load(Ordering::Relaxed)
+    }
+
+    /// 區間流量：回傳自上次呼叫以來的上傳/下載增量，並重置基準點。
+    /// 第一次呼叫僅建立基準 (增量為 0)，後續呼叫即反映兩次取樣間的區間流量。
+    pub fn interval_stats(&self) -> IntervalStats {
+        let now = Instant::now();
+        let tx = self.tx_bytes();
+        let rx = self.rx_bytes();
+        let mut guard = self.inner.interval.lock().unwrap();
+        let (start, tx0, rx0) = match *guard {
+            Some((s, t, r)) => (s, t, r),
+            None => (now, tx, rx),
+        };
+        let stats = IntervalStats {
+            tx_bytes: tx.saturating_sub(tx0),
+            rx_bytes: rx.saturating_sub(rx0),
+            elapsed: now.duration_since(start),
+        };
+        *guard = Some((now, tx, rx));
+        stats
+    }
+
     /// 自建立以來的經過時間。
     pub fn elapsed(&self) -> Duration {
         self.inner.started.elapsed()
@@ -119,15 +147,21 @@ impl TrafficMeter {
     /// 人類可讀統計摘要 (含速率與封包數)。
     pub fn display(&self) -> String {
         let snap = self.snapshot();
+        let iv = self.interval_stats();
         format!(
-            "📊 [流量統計] 執行 {} | 上傳: {} ({}/s, {} 封包) | 下載: {} ({}/s, {} 封包)",
+            "📊 [流量統計] 執行 {} | 總流量: {} | 上傳: {} ({}/s, {} 封包) | 下載: {} ({}/s, {} 封包) | 區間: 上傳 {} ({}/s) / 下載 {} ({}/s)",
             format_duration(snap.elapsed),
+            format_bytes(self.total_bytes()),
             format_bytes(snap.tx_bytes),
             format_rate_bytes(snap.tx_bytes, snap.elapsed),
             snap.tx_packets,
             format_bytes(snap.rx_bytes),
             format_rate_bytes(snap.rx_bytes, snap.elapsed),
             snap.rx_packets,
+            format_bytes(iv.tx_bytes),
+            format_rate_bytes(iv.tx_bytes, iv.elapsed),
+            format_bytes(iv.rx_bytes),
+            format_rate_bytes(iv.rx_bytes, iv.elapsed),
         )
     }
 }
@@ -139,6 +173,14 @@ pub struct TrafficSnapshot {
     pub rx_bytes: u64,
     pub tx_packets: u64,
     pub rx_packets: u64,
+    pub elapsed: Duration,
+}
+
+/// 區間流量增量快照 (兩次區間取樣之間的上傳/下載增量)。
+#[derive(Debug, Clone, Copy, Default)]
+pub struct IntervalStats {
+    pub tx_bytes: u64,
+    pub rx_bytes: u64,
     pub elapsed: Duration,
 }
 
@@ -401,6 +443,8 @@ mod tests {
         assert!(text.contains("封包"));
         assert!(text.contains("上傳"));
         assert!(text.contains("下載"));
+        assert!(text.contains("總流量"), "display 應包含總流量");
+        assert!(text.contains("區間"), "display 應包含區間");
     }
 
     #[test]
@@ -470,5 +514,29 @@ mod tests {
         assert_eq!(format_duration(Duration::from_secs(9)), "9s");
         assert_eq!(format_duration(Duration::from_secs(65)), "1m 05s");
         assert_eq!(format_duration(Duration::from_secs(3661)), "1h 01m 01s");
+    }
+
+    #[test]
+    fn total_and_interval_stats() {
+        let m = TrafficMeter::new();
+        assert_eq!(m.total_bytes(), 0);
+
+        m.record_tx(1000);
+        m.record_rx(2000);
+        assert_eq!(m.total_bytes(), 3000);
+
+        // 第一次呼叫建立基準，無增量
+        let first = m.interval_stats();
+        assert_eq!(first.tx_bytes, 0);
+        assert_eq!(first.rx_bytes, 0);
+
+        // 第二次呼叫反映兩次之間的增量
+        m.record_tx(500);
+        m.record_rx(250);
+        let second = m.interval_stats();
+        assert_eq!(second.tx_bytes, 500);
+        assert_eq!(second.rx_bytes, 250);
+        // total_bytes 仍反映累計
+        assert_eq!(m.total_bytes(), 3750);
     }
 }

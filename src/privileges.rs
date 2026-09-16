@@ -135,7 +135,10 @@ pub fn privilege_guidance() -> &'static str {
     }
     #[cfg(target_os = "macos")]
     {
-        "🔐 [macOS] TUN/路由需 root 權限，請以 `sudo {}` 執行。macOS 不支援 Linux capabilities 免 root 方案。"
+        "🔐 [macOS] TUN/路由需 root 權限，請以 `sudo <binary>` 執行。
+  macOS 無 Linux CAP_NET_ADMIN 機制，必須完全 root。
+  程式使用內建 utun 介面 (無需 /dev/tun 節點)。
+  若建立失敗，請先確認 `sudo <binary>` 已正確執行，並以 `ifconfig utunN` 檢查介面是否建立。"
     }
     #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
     {

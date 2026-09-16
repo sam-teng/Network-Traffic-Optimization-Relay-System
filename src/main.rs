@@ -4,6 +4,7 @@ mod disclaimer;
 mod net_routes;
 mod privileges;
 mod tls;
+mod tun_backend;
 #[cfg(target_os = "windows")]
 mod win_wintun;
 
@@ -100,25 +101,28 @@ async fn main() -> Result<()> {
         if config.tls { "開啟" } else { "關閉" }
     );
 
-    let mut tun_config = tun::Configuration::default();
-    tun_config
-        .name(&config.tun_name)
-        .address(&config.tun_ip)
-        .netmask(&config.tun_netmask)
-        .up();
+    let backend = tun_backend::TunBackend::parse(&config.tun_backend);
+    let tun_handle = tun_backend::create_with_fallback(
+        &backend,
+        &config.tun_name,
+        &config.tun_ip,
+        &config.tun_netmask,
+    )
+    .context("建立 TUN 虛擬網卡失敗（後端: {backend}），請參閱上方權限指引後重試")?;
+    println!(
+        "✅ TUN 網卡 [{}] 掛載成功 (IP: {}, 後端: {})",
+        tun_handle.iface, config.tun_ip, backend
+    );
+    tun_backend::verify_iface_up(&tun_handle.iface);
 
-    let dev = tun::create_as_async(&tun_config)
-        .context("建立 TUN 虛擬網卡失敗，請確認是否具備系統管理權限 (如 setcap 或 Administrator)")?;
-    println!("✅ TUN 網卡 [{}] 掛載成功 (IP: {})", config.tun_name, config.tun_ip);
-
-    let tun = SharedTun::new(dev);
+    let tun = SharedTun::new(tun_handle.dev);
     let engine = Arc::new(NDcodeTunEngine::new());
     let traffic = Arc::new(TrafficMeter::new());
 
     // 建立隧道路由 (Client 才需要；Server 純轉發不搶路由)
     if config.mode == RunningMode::Client {
         if let Err(e) = net_routes::apply_tun_route(
-            &config.tun_name,
+            &tun_handle.iface,
             &config.tun_gateway,
             &config.tun_route,
             config.enable_route,
@@ -150,6 +154,7 @@ fn run_interactive_setup_wizard() -> Result<()> {
     let tun_name = prompt_input("請輸入 TUN 介面名稱", "tun0")?;
     let tun_ip = prompt_input("請輸入 TUN 介面 IP 位址", "10.0.0.2")?;
     let tun_netmask = prompt_input("請輸入 TUN 子網路遮罩", "255.255.255.0")?;
+    let tun_backend = prompt_input("TUN 後端 (auto / tun-rs / system)", "auto")?;
     let tun_gateway = prompt_input("請輸入 TUN 對端閘道 IP", "10.0.0.1")?;
     let tun_route = prompt_input("請輸入路由進 TUN 的目標 (default 或 CIDR)", "default")?;
     let server_addr = match running_mode {
@@ -195,6 +200,7 @@ fn run_interactive_setup_wizard() -> Result<()> {
         "tun_name": tun_name,
         "tun_ip": tun_ip,
         "tun_netmask": tun_netmask,
+        "tun_backend": tun_backend,
         "tun_gateway": tun_gateway,
         "tun_route": tun_route,
         "server_addr": server_addr,

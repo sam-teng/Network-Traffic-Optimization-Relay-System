@@ -2,6 +2,17 @@
 
 本專案版本以 `v0.0.0-NDcode3-*` 標記。變更依日期與版本記錄於下。
 
+## [0.0.0-NDcode3-beta.7] - 2026-09-17
+
+### 新增
+- TUN 後端可設定化 (`--tun-backend` auto / tun-rs / system，也可寫入 `ndcode_config.json` 與設定精靈)：auto 於 macOS/Linux 建立失敗時自動降級為「最小建立 + 系統工具 (`ip` / `ifconfig`) 賦址與啟動」備用方案，避免 root 環境下 tun-rs 全設定失敗即退出
+- TUN 建立後介面 UP 驗證：Linux 以 `ip -o link show`、macOS 以 `ifconfig <utunN>` 確認介面已啟動；Windows 由 wintun 驅動管理，顯示提示略過。macOS 自動辨識實際 `utunN` 介面名 (不再假設為 `tun0`)
+- 系統工具降級時依權限自動套用 `sudo` 前置；失敗時輸出各平台權限診斷指引 (macOS 完整 root 說明、Linux setcap/CAP_NET_ADMIN、Windows 內嵌 wintun)
+- 流量統計顯示加入「總流量」(累計上傳+下載)與「區間流量」(每次顯示間隔內之上傳/下載增量，`traffic_meter::interval_stats`)
+
+### 變更
+- 版本號同步為 `0.0.0-NDcode3-beta.7`
+
 ## [0.0.0-NDcode3-beta.6] - 2026-09-16
 
 ### 新增

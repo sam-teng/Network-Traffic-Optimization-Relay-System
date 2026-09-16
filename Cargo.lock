@@ -42,7 +42,7 @@ dependencies = [
 
 [[package]]
 name = "NTORS"
-version = "0.0.0-NDcode3-beta.6"
+version = "0.0.0-NDcode3-beta.7"
 dependencies = [
  "NDcode3",
  "anyhow",

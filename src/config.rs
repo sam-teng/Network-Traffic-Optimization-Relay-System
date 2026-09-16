@@ -68,6 +68,10 @@ pub struct AppConfig {
     #[arg(long, default_value = "255.255.255.0")]
     pub tun_netmask: String,
 
+    /// TUN 後端: auto (default) | tun-rs | system (macOS/Linux)
+    #[arg(long, default_value = "auto")]
+    pub tun_backend: String,
+
     /// TUN 對端閘道 IP (Client 通常為 Server 的隧道 IP)
     #[arg(long, default_value = "10.0.0.1")]
     pub tun_gateway: String,
@@ -178,6 +182,13 @@ impl AppConfig {
                     cfg.tun_netmask = s.clone();
                 }
             }
+            if !cli_gave("tun_backend") {
+                if let Some(ref s) = file_cfg.tun_backend {
+                    if !s.is_empty() {
+                        cfg.tun_backend = s.clone();
+                    }
+                }
+            }
             if !cli_gave("tun_gateway") {
                 if let Some(ref s) = file_cfg.tun_gateway {
                     cfg.tun_gateway = s.clone();
@@ -251,6 +262,7 @@ struct ConfigFile {
     tun_name: Option<String>,
     tun_ip: Option<String>,
     tun_netmask: Option<String>,
+    tun_backend: Option<String>,
     tun_gateway: Option<String>,
     tun_route: Option<String>,
     enable_route: Option<bool>,
@@ -306,6 +318,7 @@ mod tests {
                 "tun_name": "wm0",
                 "tun_ip": "10.9.9.9",
                 "tun_netmask": "255.255.0.0",
+                "tun_backend": "tun-rs",
                 "standalone": true,
                 "scope": "all"
             }"#,
@@ -317,6 +330,7 @@ mod tests {
         assert_eq!(cfg.tun_name, "wm0");
         assert_eq!(cfg.tun_ip, "10.9.9.9");
         assert_eq!(cfg.tun_netmask, "255.255.0.0");
+        assert_eq!(cfg.tun_backend, "tun-rs", "設定檔 tun_backend=tun-rs 應生效");
         assert!(cfg.standalone);
         assert_eq!(cfg.scope, CompressionScopeArg::All);
         let _ = std::fs::remove_file(&path);
@@ -372,6 +386,27 @@ mod tests {
         let cfg = AppConfig::parse_args_from(["ntors", "--tls-ca", "from_cli.pem"], &path);
         assert!(cfg.tls);
         assert_eq!(cfg.tls_ca, "from_cli.pem");
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_tun_backend_cli_override_config_file() {
+        let path = temp_config(
+            r#"{
+                "mode": "Client",
+                "tun_backend": "tun-rs"
+            }"#,
+        );
+        // CLI 未給 → 檔案 tun-rs 應生效
+        let cfg1 = AppConfig::parse_args_from(["ntors"], &path);
+        assert_eq!(cfg1.tun_backend, "tun-rs", "檔案 tun_backend=tun-rs 應生效");
+
+        // CLI 給 --tun-backend=system 應覆蓋檔案值
+        let cfg2 = AppConfig::parse_args_from(
+            ["ntors", "--tun-backend", "system"],
+            &path,
+        );
+        assert_eq!(cfg2.tun_backend, "system", "CLI --tun-backend=system 應覆蓋檔案");
         let _ = std::fs::remove_file(&path);
     }
 
