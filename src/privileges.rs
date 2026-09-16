@@ -148,6 +148,7 @@ pub fn privilege_guidance() -> &'static str {
 
 /// 執行時權限就緒檢查：不足時列印指引，回傳是否繼續。
 /// `auto_elevate=true` 時 (Windows) 自動請求 UAC 提升。
+#[cfg_attr(not(target_os = "windows"), allow(unused_variables))] // macOS/Linux 不使用 auto_elevate
 pub fn ensure_privilege_ready(auto_elevate: bool) -> Result<bool> {
     if is_elevated() {
         println!("🔐 [Privilege] 已具備系統管理權限");

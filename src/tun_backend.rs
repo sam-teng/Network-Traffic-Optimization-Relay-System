@@ -230,7 +230,8 @@ fn detect_iface_by_ip(ip: &str) -> Option<String> {
     } else {
         // macOS: ifconfig -a → 查找 `inet <ip> ` 前導行
         let out = PCommand::new("ifconfig").arg("-a").output().ok()?;
-        let lines: Vec<&str> = String::from_utf8_lossy(&out.stdout).lines().collect();
+        let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
+        let lines: Vec<&str> = stdout.lines().collect();
         let needle = format!("inet {ip} ");
         for i in 0..lines.len() {
             if lines[i].contains(&needle) {
@@ -279,7 +280,7 @@ fn set_iface_addr_up(iface: &str, ip: &str, netmask: &str) -> Result<()> {
             }
         }
         // ip link set <iface> up
-        let up_cmd = build_cmd("ip", &["link", "set", iface, "up"], sudo_needed);
+        let mut up_cmd = build_cmd("ip", &["link", "set", iface, "up"], sudo_needed);
         match up_cmd.status() {
             Ok(s) if !s.success() => eprintln!("⚠️  [TUN] ip link set up 回報失敗"),
             Err(e) => eprintln!("⚠️  [TUN] 無法執行 ip link set up: {e}"),
