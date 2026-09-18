@@ -26,7 +26,7 @@ pub fn is_elevated() -> bool {
     }
     #[cfg(target_os = "macos")]
     {
-        id_is_root()
+        id_is_root() || macos_admin_group_member()
     }
     #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
     {
@@ -60,6 +60,21 @@ fn id_is_root() -> bool {
         .arg("-u")
         .output()
         .map(|o| String::from_utf8_lossy(&o.stdout).trim() == "0")
+        .unwrap_or(false)
+}
+
+/// macOS：目前帳號是否屬於 `admin` 群組。
+/// macOS 的 `sudo` 權限由「屬於 admin 群組」決定（預設第一管理員在 admin 群組），
+/// 因此「已是管理員但非 uid=0」時視為可提升權限；utun 賦址/路由仍需 sudo 密碼。
+#[cfg(target_os = "macos")]
+fn macos_admin_group_member() -> bool {
+    Command::new("id")
+        .args(["-G", "-n"])
+        .output()
+        .map(|o| {
+            let out = String::from_utf8_lossy(&o.stdout);
+            out.split_whitespace().any(|g| g == "admin")
+        })
         .unwrap_or(false)
 }
 
@@ -135,10 +150,10 @@ pub fn privilege_guidance() -> &'static str {
     }
     #[cfg(target_os = "macos")]
     {
-        "🔐 [macOS] TUN/路由需 root 權限，請以 `sudo <binary>` 執行。
-  macOS 無 Linux CAP_NET_ADMIN 機制，必須完全 root。
-  程式使用內建 utun 介面 (無需 /dev/tun 節點)。
-  若建立失敗，請先確認 `sudo <binary>` 已正確執行，並以 `ifconfig utunN` 檢查介面是否建立。"
+        "🔐 [macOS] 建立 TUN/utun 介面不需 root（系統自動指派 `utunN`）；只有「賦址 / 路由 / masc 規則」需要 `sudo`。
+  若確認已具備 root 或 admin 群組身分仍被提示缺權，可能是偵測路徑或停止後未釋放的舊介面所致——
+  請執行 `ifconfig utunN` 確認介面編號，並避免重覆建立 (EADDRINUSE)。
+  (此 macOS 路徑為待真機驗證項目)"
     }
     #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
     {

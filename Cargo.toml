@@ -29,8 +29,11 @@ name = "functional_tests"
 anyhow = "1.0"
 # 非同步 Runtime 與 TCP 通訊
 tokio = { version = "1.38", features = ["full"] }
-# Layer 3 虛擬網卡
+# Layer 3 虛擬網卡 (舊 crate：crates.io/crates/tun，import 為 `tun`)
 tun = { version = "0.6", features = ["async"] }
+# 真 tun-rs：crates.io/crates/tun-rs，import 為 `tun_rs`（與上方 `tun` 是不同 crate，勿混淆）
+# macOS 用內建 utunN 建立，utun 介面建立本身不需 root
+tun-rs = "2.8"
 # 命令列參數解析
 clap = { version = "4.5", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }

@@ -1,6 +1,8 @@
 /target/
 .cargo/
 
+*.bak
+
 # NDcode3 核心引擎 (自有/閉源，不納入本倉庫；需另行放置於 NDcode3/ 目錄)
 /NDcode3/
 *.exe
