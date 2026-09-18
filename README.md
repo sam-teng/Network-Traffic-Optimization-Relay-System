@@ -1,4 +1,4 @@
-[![Build NTORS Rust APP Upload a Build Artifact](https://github.com/sam-teng/Network-Traffic-Optimization-Relay-System/actions/workflows/rust.yml/badge.svg)](https://github.com/sam-teng/Network-Traffic-Optimization-Relay-System/actions/workflows/rust.yml)
+[![Cross Build NTORS Static Binaries](https://github.com/sam-teng/Network-Traffic-Optimization-Relay-System/actions/workflows/cross-build.yml/badge.svg)](https://github.com/sam-teng/Network-Traffic-Optimization-Relay-System/actions/workflows/cross-build.yml) [![Semgrep](https://github.com/sam-teng/Network-Traffic-Optimization-Relay-System/actions/workflows/semgrep.yml/badge.svg)](https://github.com/sam-teng/Network-Traffic-Optimization-Relay-System/actions/workflows/semgrep.yml)
 # Network-Traffic-Optimization-Relay-System (NTORS)
 
 Network Traffic Optimization & Relay System
