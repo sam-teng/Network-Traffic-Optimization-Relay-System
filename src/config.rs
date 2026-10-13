@@ -72,6 +72,14 @@ pub struct AppConfig {
     #[arg(long, default_value = "auto")]
     pub tun_backend: String,
 
+    /// TUN 封裝層：l3 (TUN, default) | l2 (TAP，透過 tun-rs Layer::L2，需 mac 選配)
+    #[arg(long, default_value = "l3")]
+    pub tun_layer: String,
+
+    /// TAP (L2) MAC 位址，格式如 02:42:AC:11:00:02 或 AABBCCDDEEFF；留空則自動產生/由驅動指派
+    #[arg(long, default_value = "")]
+    pub tun_mac: String,
+
     /// TUN 對端閘道 IP (Client 通常為 Server 的隧道 IP)
     #[arg(long, default_value = "10.0.0.1")]
     pub tun_gateway: String,
@@ -189,6 +197,20 @@ impl AppConfig {
                     }
                 }
             }
+            if !cli_gave("tun_layer") {
+                if let Some(ref s) = file_cfg.tun_layer {
+                    if !s.is_empty() {
+                        cfg.tun_layer = s.clone();
+                    }
+                }
+            }
+            if !cli_gave("tun_mac") {
+                if let Some(ref s) = file_cfg.tun_mac {
+                    if !s.is_empty() {
+                        cfg.tun_mac = s.clone();
+                    }
+                }
+            }
             if !cli_gave("tun_gateway") {
                 if let Some(ref s) = file_cfg.tun_gateway {
                     cfg.tun_gateway = s.clone();
@@ -263,6 +285,8 @@ struct ConfigFile {
     tun_ip: Option<String>,
     tun_netmask: Option<String>,
     tun_backend: Option<String>,
+    tun_layer: Option<String>,
+    tun_mac: Option<String>,
     tun_gateway: Option<String>,
     tun_route: Option<String>,
     enable_route: Option<bool>,

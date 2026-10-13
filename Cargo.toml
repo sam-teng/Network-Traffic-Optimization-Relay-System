@@ -1,6 +1,6 @@
 [package]
 name = "NTORS"
-version = "0.0.0-NDcode3-beta.7"
+version = "0.0.0-NDcode3-beta.8"
 edition = "2024"
 
 [lib]
@@ -30,10 +30,12 @@ anyhow = "1.0"
 # 非同步 Runtime 與 TCP 通訊
 tokio = { version = "1.38", features = ["full"] }
 # Layer 3 虛擬網卡 (舊 crate：crates.io/crates/tun，import 為 `tun`)
+# 保留舊 tun 0.6 作為 L3 fallback；勿與下方 `tun-rs` / `tun_rs` 混淆
 tun = { version = "0.6", features = ["async"] }
 # 真 tun-rs：crates.io/crates/tun-rs，import 為 `tun_rs`（與上方 `tun` 是不同 crate，勿混淆）
-# macOS 用內建 utunN 建立，utun 介面建立本身不需 root
-tun-rs = "2.8"
+# 必須啟用 `async` (= `async_tokio`) 才能使用 `tun_rs::AsyncDevice` 與 `DeviceBuilder::build_async()`
+# macOS 用內建 utunN/feth 建立，utun 介面建立本身不需 root；L2 TAP 需 feth/tap-windows 驅動
+tun-rs = { version = "2.8", features = ["async"] }
 # 命令列參數解析
 clap = { version = "4.5", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }
