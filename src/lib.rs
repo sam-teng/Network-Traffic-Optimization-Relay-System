@@ -6,5 +6,6 @@ pub mod net_transport;
 pub mod tls;
 pub mod traffic_meter;
 pub mod wasm_tunnel;
+pub mod l2_bridge;
 #[path = "pipeline/mod.rs"]
 pub mod pipeline;

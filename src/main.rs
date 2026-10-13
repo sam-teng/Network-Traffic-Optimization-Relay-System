@@ -1,6 +1,8 @@
 // main.rs - NDcode 3 TUN 虛擬網卡引擎
 mod config;
 mod disclaimer;
+mod l2_bridge;
+mod macutils;
 mod net_routes;
 mod privileges;
 mod tls;
@@ -86,7 +88,18 @@ async fn main() -> Result<()> {
         run_interactive_setup_wizard()?;
     }
 
-    let config = AppConfig::parse_args();
+    let mut config = AppConfig::parse_args();
+    // `--tun-mac physical` / config 內 "physical"：解析為承載對外連線的實體網卡 MAC。
+    // 綁定 MAC（埠安全）的網路只接受登記來源 MAC；先解析成具體位址，
+    // 後續日誌、與實際 MAC 的比對、寫入 JSON 才都會是正確值。
+    if config.tun_mac.eq_ignore_ascii_case("physical") {
+        let m = macutils::default_route_physical_mac().context(
+            "--tun-mac physical：找不到承載對外連線的實體網卡 MAC\n\
+             請改用明確位址，例如 --tun-mac 3C:AB:72:5B:13:4D",
+        )?;
+        println!("ℹ️  [MAC] --tun-mac physical → 實體網卡 MAC = {m}");
+        config.tun_mac = m;
+    }
 
     // 權限就緒檢查：無管理權限時，依 --auto-elevate 觸發 UAC 提升或列印指引
     if !privileges::ensure_privilege_ready(config.auto_elevate)? {
@@ -102,16 +115,128 @@ async fn main() -> Result<()> {
     );
 
     let backend = tun_backend::TunBackend::parse(&config.tun_backend);
+    let layer = tun_backend::TunLayer::parse(&config.tun_layer);
+    // 若請求 L2 TAP，優先以 tun_rs Layer::L2 建立（參考 examples/async_tap.rs）
+    // 平台矩陣：Linux ✅ `ip link set dev <tap> address <MAC>`、macOS ✅ feth、Windows ✅ tap-windows
+    if layer == tun_backend::TunLayer::L2 {
+        println!(
+            "🔧 [TUN] L2 TAP 請求 (tun_rs Layer::L2, 參考 async_tap.rs) name={} ip={}/{} mac={}",
+            config.tun_name,
+            config.tun_ip,
+            config.tun_netmask,
+            if config.tun_mac.is_empty() { "(auto)" } else { &config.tun_mac }
+        );
+        if !privileges::is_elevated() {
+            eprintln!(
+                "⚠️  [Privilege] L2 TAP 建立需管理員/root 權限: {}",
+                privileges::privilege_guidance()
+            );
+        }
+        match tun_backend::create_l2_tap(
+            &config.tun_name,
+            &config.tun_ip,
+            &config.tun_netmask,
+            &config.tun_mac,
+        ) {
+            Ok(l2) => {
+                println!(
+                    "✅ L2 TAP [{}] 掛載成功 (Layer::L2 via tun_rs, 參考 examples/async_tap.rs)",
+                    l2.iface
+                );
+                tun_backend::verify_iface_up(&l2.iface);
+                // 以原生工具重新賦值（冪等，可修正 tun-rs builder 的部分賦址情境）
+                if let Err(e) =
+                    tun_backend::setup_interface(&l2.iface, &config.tun_ip, &config.tun_netmask)
+                {
+                    eprintln!("⚠️  [Setup] 介面賦址未完全成功: {e}");
+                }
+                // 印出驅動實際回報的 MAC（TAP_IOCTL_GET_MAC），而非設定值
+                // —— 僅看設定值會誤判：registry 寫入成功 ≠ 已套用於運行中的介面
+                match l2.mac {
+                    Some(m) => {
+                        println!(
+                            "✅ [MAC] L2 TAP 實際 MAC = {:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+                            m[0], m[1], m[2], m[3], m[4], m[5]
+                        );
+                        if !config.tun_mac.is_empty() {
+                            let want =
+                                tun_backend::parse_mac_array(&config.tun_mac).ok();
+                            if let Some(want) = want {
+                                if want != m {
+                                    eprintln!(
+                                        "⚠️  [MAC] 實際 MAC 與設定 {} 不符（設定值僅寫入 registry，未生效）",
+                                        config.tun_mac
+                                    );
+                                }
+                            }
+                        }
+                    }
+                    None => eprintln!("ℹ️  [MAC] 無法查詢 L2 TAP 實際 MAC"),
+                }
+
+                // L2 直接作為管線載體：以 l2_bridge 將 tun_rs::AsyncDevice
+                // (recv/send) 轉接為 tokio AsyncRead/AsyncWrite，
+                // 不再退回 L3 TUN（舊 `tun` crate），避免重複建卡與 netsh 衝突。
+                let l2_shared = l2_bridge::SharedL2::new(Arc::new(l2.dev));
+                let engine = Arc::new(NDcodeTunEngine::new());
+                let traffic = Arc::new(TrafficMeter::new());
+
+                if config.mode == RunningMode::Client {
+                    if let Err(e) = net_routes::apply_tun_route(
+                        &l2.iface,
+                        &config.tun_gateway,
+                        &config.tun_route,
+                        config.enable_route,
+                    ) {
+                        eprintln!("⚠️  [Route] 路由設定失敗: {:?} (可關閉路由或檢查權限)", e);
+                    }
+                }
+                match config.mode {
+                    RunningMode::Client => {
+                        run_client_mode(
+                            config,
+                            engine,
+                            l2_shared.clone(),
+                            l2_shared,
+                            traffic.clone(),
+                        )
+                        .await?
+                    }
+                    RunningMode::Server => {
+                        // Server 模式不佔用本機 TUN 資料面；L2 TAP 僅供觀察/測試
+                        eprintln!(
+                            "ℹ️  [L2] Server 模式不啟用 L2 資料面，TAP [{}] 保持掛載以供觀察",
+                            l2.iface
+                        );
+                        run_server_mode(config, engine, traffic.clone()).await?;
+                    }
+                }
+                return Ok(());
+            }
+            Err(e) => {
+                eprintln!("❌ [TUN] L2 TAP 建立失敗: {e:?}");
+                if backend != tun_backend::TunBackend::Auto {
+                    return Err(e).context("L2 TAP 建立失敗且後端非 auto，不自動降級")?;
+                }
+                eprintln!("⚠️  [TUN] L2 失敗且後端為 auto，自動降級至 L3 TUN...");
+            }
+        }
+    }
+
     let tun_handle = tun_backend::create_with_fallback(
         &backend,
         &config.tun_name,
         &config.tun_ip,
         &config.tun_netmask,
     )
-    .context("建立 TUN 虛擬網卡失敗（後端: {backend}），請參閱上方權限指引後重試")?;
+    .with_context(|| {
+        format!(
+            "建立 TUN 虛擬網卡失敗（後端: {backend}），請參閱上方權限指引後重試"
+        )
+    })?;
     println!(
-        "✅ TUN 網卡 [{}] 掛載成功 (IP: {}, 後端: {})",
-        tun_handle.iface, config.tun_ip, backend
+        "✅ TUN 網卡 [{}] 掛載成功 (IP: {}, 後端: {}, 層: {})",
+        tun_handle.iface, config.tun_ip, backend, layer
     );
     tun_backend::verify_iface_up(&tun_handle.iface);
 
@@ -151,10 +276,90 @@ fn run_interactive_setup_wizard() -> Result<()> {
     let running_mode = if mode == 0 { RunningMode::Client } else { RunningMode::Server };
 
     // 2. 輸入 IP 與綁定資訊
-    let tun_name = prompt_input("請輸入 TUN 介面名稱", "tun0")?;
-    let tun_ip = prompt_input("請輸入 TUN 介面 IP 位址", "10.0.0.2")?;
+    let tun_name = prompt_input("請輸入 TUN/TAP 介面名稱", "tun0")?;
+    let tun_ip = prompt_input("請輸入 TUN/TAP 介面 IP 位址", "10.0.0.2")?;
     let tun_netmask = prompt_input("請輸入 TUN 子網路遮罩", "255.255.255.0")?;
     let tun_backend = prompt_input("TUN 後端 (auto / tun-rs / system)", "auto")?;
+
+    // 2.1 封裝層選擇：l3 (TUN, 舊 tun crate) | l2 (TAP, 真 tun-rs Layer::L2)
+    let layer_choice = prompt_choice(
+        "請選擇封裝層 (L3 TUN / L2 TAP):",
+        &["L3 TUN (預設, 相容既有管線)", "L2 TAP (Ethernet, tun-rs Layer::L2)"],
+    )?;
+    let tun_layer = if layer_choice == 0 { "l3" } else { "l2" }.to_string();
+
+    // 2.2 L2 TAP 專用：MAC 位址（留空 = 自動產生本地管理 MAC）
+    let tun_mac = if tun_layer == "l2" {
+        println!(
+            "ℹ️  L2 TAP 支援 MAC 設定。\n\
+             \x20   - 留空：自動產生本地管理 MAC (02:xx:xx:xx:xx:xx)\n\
+             \x20   - 指定：格式 02:42:AC:11:00:02 或 AABBCCDDEEFF\n\
+             \x20   - physical：自動取「對外連線」實體網卡 MAC（綁 MAC 網路請用這個）\n\
+             \x20   - 複製實體網卡：列出候選並標記對外連線的那張\n\
+             \n\
+             \x20   若上游網路綁定 MAC（埠安全），TAP 必須與上線網卡同 MAC，\n\
+             \x20   否則封包會被交換器靜默丟棄。"
+        );
+        match prompt_choice(
+            "MAC 來源:",
+            &["自動產生", "手動輸入", "複製實體網卡 MAC"],
+        )? {
+            0 => String::new(),
+            1 => prompt_input(
+                "請輸入 TAP MAC 位址（綁 MAC 網路可輸入 physical）",
+                "02:42:AC:11:00:02",
+            )?,
+            _ => {
+                let candidates = macutils::list_physical_adapters();
+                if candidates.is_empty() {
+                    eprintln!("⚠️  未偵測到可用的實體網卡，改為自動產生 MAC");
+                    String::new()
+                } else {
+                    // 標示承載預設路徑的實體網卡：綁 MAC 網路通常就是這張，
+                    // 並把它設為預設選項以避免在多張實體網卡間選錯。
+                    let up_mac = macutils::default_route_physical_mac();
+                    let mut up_idx: Option<usize> = None;
+                    for (i, c) in candidates.iter().enumerate() {
+                        let is_up = up_mac
+                            .as_deref()
+                            .map(|m| m.eq_ignore_ascii_case(&c.mac))
+                            .unwrap_or(false);
+                        if is_up && up_idx.is_none() {
+                            up_idx = Some(i);
+                        }
+                        println!(
+                            "   [{}] {} — {}{}",
+                            i,
+                            c.name,
+                            c.mac,
+                            if is_up {
+                                "   ← 對外連線（綁 MAC 網路）"
+                            } else {
+                                ""
+                            }
+                        );
+                    }
+                    let def = up_idx
+                        .map(|i| i.to_string())
+                        .unwrap_or_else(|| "0".to_string());
+                    let idx = prompt_input(
+                        &format!("請選擇來源實體網卡 (0-{})", candidates.len() - 1),
+                        &def,
+                    )?;
+                    match idx.trim().parse::<usize>() {
+                        Ok(n) if n < candidates.len() => candidates[n].mac.clone(),
+                        _ => {
+                            eprintln!("⚠️  選擇無效，改為自動產生 MAC");
+                            String::new()
+                        }
+                    }
+                }
+            }
+        }
+    } else {
+        String::new()
+    };
+
     let tun_gateway = prompt_input("請輸入 TUN 對端閘道 IP", "10.0.0.1")?;
     let tun_route = prompt_input("請輸入路由進 TUN 的目標 (default 或 CIDR)", "default")?;
     let server_addr = match running_mode {
@@ -201,6 +406,8 @@ fn run_interactive_setup_wizard() -> Result<()> {
         "tun_ip": tun_ip,
         "tun_netmask": tun_netmask,
         "tun_backend": tun_backend,
+        "tun_layer": tun_layer,
+        "tun_mac": tun_mac,
         "tun_gateway": tun_gateway,
         "tun_route": tun_route,
         "server_addr": server_addr,
@@ -213,7 +420,50 @@ fn run_interactive_setup_wizard() -> Result<()> {
     });
     fs::write("ndcode_config.json", serde_json::to_string_pretty(&config_json)?)?;
     println!("\n✅ NDcode 3 設定檔已成功寫入至 `ndcode_config.json`！若同時以命令列參數啟動，命令列參數優先。");
+
+    // 6. 選擇性：立即 provisioning 虛擬介面（建立 + 賦址 + 啟用）
+    if prompt_confirm("是否立即建立並設定虛擬網路介面 (建立 TAP/TUN + 賦址 + 啟用)？")? {
+        provision_interface(&tun_name, &tun_ip, &tun_netmask, &tun_layer, &tun_mac)?;
+    }
+
     println!("--------------------------------------------------\n");
+    Ok(())
+}
+
+/// 依封裝層建立虛擬介面並完成賦址。
+///
+/// L2：走 `tun_backend::create_l2_tap`（真 tun-rs `Layer::L2`）
+/// L3：走 `tun_backend::create_with_fallback`（舊 `tun` crate）
+///
+/// 兩者皆在建立後以 `setup_interface` 以作業系統原生工具重新賦值（冪等）。
+fn provision_interface(
+    name: &str,
+    ip: &str,
+    netmask: &str,
+    layer: &str,
+    mac: &str,
+) -> Result<()> {
+    println!("🔧 [Setup] 開始配置虛擬介面 (layer={layer}, name={name}, ip={ip})");
+
+    let iface = if tun_backend::TunLayer::parse(layer) == tun_backend::TunLayer::L2 {
+        let handle = tun_backend::create_l2_tap(name, ip, netmask, mac)
+            .context("L2 TAP 建立失敗（請確認已安裝 tap-windows 驅動並以管理員執行）")?;
+        handle.iface
+    } else {
+        let backend = tun_backend::TunBackend::parse("auto");
+        let handle = tun_backend::create_with_fallback(&backend, name, ip, netmask)
+            .context("L3 TUN 建立失敗")?;
+        handle.iface
+    };
+
+    tun_backend::setup_interface(&iface, ip, netmask)
+        .with_context(|| format!("介面 [{iface}] 賦址失敗"))?;
+
+    println!("✅ [Setup] 介面 [{iface}] 已完成建立與賦值（{ip}/{netmask}）");
+    println!(
+        "ℹ️  此介面由本次程序持有；結束後（非 persist）會自動移除。\n\
+         \x20  若需永久保留，請以系統工具建立後於啟動時指定既有介面名稱。"
+    );
     Ok(())
 }
 
