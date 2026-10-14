@@ -105,6 +105,27 @@ pub struct AppConfig {
     #[arg(long, value_enum, default_value_t = CompressionScopeArg::Http)]
     pub scope: CompressionScopeArg,
 
+    /// 解壓炸彈防護：單次解壓輸出上限 (位元組)。0 = 不限制。
+    /// XZ 路徑為事前阻斷 (邊解邊數)；NDcode3 cascade 路徑為事後驗證。
+    #[arg(long, default_value_t = 64 * 1024 * 1024)]
+    pub decompress_max_output: u64,
+
+    /// 解壓炸彈防護：連線累計解壓預算 (位元組)。0 = 不限制 (預設)。
+    #[arg(long, default_value_t = 0)]
+    pub decompress_max_total: u64,
+
+    /// 解壓炸彈防護：壓縮比告警門檻 (僅記錄不攔截)。0 = 不告警。
+    /// 高壓縮比不必然惡意（全 0 等誠實資料可合法超過），故只告警。
+    #[arg(long, default_value_t = 1000.0)]
+    pub decompress_max_ratio: f64,
+
+    /// 解壓炸彈防護：輸出超過上限時的處置
+    ///   reject           : 直接拒絕
+    ///   validate-ndcode  : (預設) 自動檢驗是否為實際 NDcode/封包位元組，是則放行
+    ///   passthrough      : 忽略上限放行 (僅除錯用)
+    #[arg(long, default_value = "validate-ndcode")]
+    pub decompress_on_exceed: String,
+
     /// 啟用 TLS/SSL 加密傳輸 (rustls)。Server 需提供憑證；Client 需 --tls-ca 或 --tls-insecure
     #[arg(long, default_value_t = false)]
     pub tls: bool,
@@ -239,6 +260,29 @@ impl AppConfig {
             if file_cfg.standalone.unwrap_or(false) && !cli_gave("standalone") {
                 cfg.standalone = true;
             }
+            // 解壓炸彈防護限值：檔案有給且 CLI 未指定才覆寫
+            if !cli_gave("decompress_max_output") {
+                if let Some(v) = file_cfg.decompress_max_output {
+                    cfg.decompress_max_output = v;
+                }
+            }
+            if !cli_gave("decompress_max_total") {
+                if let Some(v) = file_cfg.decompress_max_total {
+                    cfg.decompress_max_total = v;
+                }
+            }
+            if !cli_gave("decompress_max_ratio") {
+                if let Some(v) = file_cfg.decompress_max_ratio {
+                    cfg.decompress_max_ratio = v;
+                }
+            }
+            if !cli_gave("decompress_on_exceed") {
+                if let Some(ref s) = file_cfg.decompress_on_exceed {
+                    if !s.is_empty() {
+                        cfg.decompress_on_exceed = s.clone();
+                    }
+                }
+            }
             // TLS 相關：檔案 true 且 CLI 未給時套用；路徑檔案未有則忽略
             if file_cfg.tls.unwrap_or(false) && !cli_gave("tls") {
                 cfg.tls = true;
@@ -292,6 +336,10 @@ struct ConfigFile {
     enable_route: Option<bool>,
     standalone: Option<bool>,
     scope: Option<String>,
+    decompress_max_output: Option<u64>,
+    decompress_max_total: Option<u64>,
+    decompress_max_ratio: Option<f64>,
+    decompress_on_exceed: Option<String>,
     tls: Option<bool>,
     tls_cert: Option<String>,
     tls_key: Option<String>,

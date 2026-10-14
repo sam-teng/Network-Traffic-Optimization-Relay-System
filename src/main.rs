@@ -101,6 +101,33 @@ async fn main() -> Result<()> {
         config.tun_mac = m;
     }
 
+    // 解壓炸彈防護限值（42.zip / PASSEDA）：於啟動時初始化一次，
+    // 後續 decode_segment / engine 的守衛皆讀此程序級設定。
+    let decomp_limits = ntors::pipeline::decompression_guard::DecompressLimits {
+        max_output_per_decode: config.decompress_max_output,
+        max_total_decoded: config.decompress_max_total,
+        max_ratio_warn: config.decompress_max_ratio,
+        on_exceed: ntors::pipeline::decompression_guard::ExceedAction::parse(
+            &config.decompress_on_exceed,
+        ),
+    };
+    println!(
+        "🛡️  [BombGuard] 解壓防護: 單次輸出上限={} | 累計預算={} | 比率告警(不攔截)={:.0}:1 | 超限處置={}",
+        if decomp_limits.max_output_per_decode == 0 {
+            "不限制".to_string()
+        } else {
+            format!("{}B", decomp_limits.max_output_per_decode)
+        },
+        if decomp_limits.max_total_decoded == 0 {
+            "不限制".to_string()
+        } else {
+            format!("{}B", decomp_limits.max_total_decoded)
+        },
+        decomp_limits.max_ratio_warn,
+        decomp_limits.on_exceed,
+    );
+    ntors::pipeline::decompression_guard::set_limits(decomp_limits);
+
     // 權限就緒檢查：無管理權限時，依 --auto-elevate 觸發 UAC 提升或列印指引
     if !privileges::ensure_privilege_ready(config.auto_elevate)? {
         // Windows auto-elevate 已重新啟動新行程：舊行程直接結束

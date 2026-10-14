@@ -10,7 +10,9 @@
 
 use anyhow::{Context, Result};
 use NDcode3::file_utils::{calculate_shannon_entropy, xz_compress};
-use NDcode3::logic::{safe_xz_decompress, NDCodeLogic};
+use NDcode3::logic::NDCodeLogic;
+
+use crate::pipeline::decompression_guard;
 
 /// 串流段標頭 (對應 PacketHeader::StreamedSegment = 0x02)
 pub const STREAM_SEGMENT_HEADER: u8 = 0x02;
@@ -144,14 +146,43 @@ pub fn unpack_segment(payload: &[u8]) -> Result<(u8, &[u8])> {
 
 /// 直接解碼一個串流段 Payload → 原始 bytes
 /// (需 NDCodeLogic 實例以支援 NDCODE3 連鎖級聯解碼)
+///
+/// 解壓炸彈防護（見 `decompression_guard`）：
+///   * XZ 路徑走 [`capped_xz_decompress`]，以 `Read::take()` 邊解邊數，
+///     在配置完整輸出前中止 —— 唯一能事前阻斷的一層。
+///   * NDCODE3 路徑因 NDcode3 API 無 max-size 參數，改為事後驗證
+///     （輸出已配置才回頭檢查上限 / 比率 / 是否為實際 NDcode 位元組）。
+///     真正的事前防護是 NDcode3 側的 cascade 層數上限。
+///
+/// 本函式使用**程序級**累計計數；需每連線預算者請改用
+/// [`StreamingDecompressor::decompress_chunk`]（走具狀態的 `guard_decoded`）。
 pub fn decode_segment(payload: &[u8], logic: Option<&NDCodeLogic>) -> Result<Vec<u8>> {
+    let (encoded_len, raw, path) = decode_segment_unguarded(payload, logic)?;
+    decompression_guard::guard_decoded_global(encoded_len, raw, path)
+}
+
+/// 解碼但**不套用**守衛 —— 供需要自帶累計計數器的呼叫方使用。
+///
+/// 回傳 `(encoded_len, decoded, path)`；`path` 為守衛日誌用的路徑標籤。
+fn decode_segment_unguarded<'a>(
+    payload: &[u8],
+    logic: Option<&NDCodeLogic>,
+) -> Result<(usize, Vec<u8>, &'a str)> {
     let (engine_tag, encoded) = unpack_segment(payload)?;
+    let encoded_len = encoded.len();
     match engine_tag {
-        ENGINE_TAG_XZ => safe_xz_decompress(encoded),
+        ENGINE_TAG_XZ => {
+            let limits = decompression_guard::limits();
+            let raw =
+                decompression_guard::capped_xz_decompress(encoded, limits.max_output_per_decode)?;
+            Ok((encoded_len, raw, "stream.xz"))
+        }
         ENGINE_TAG_NDCODE3 => {
             let l = logic.context("NDCODE3 串流段需要 NDCodeLogic 實例")?;
-            l.decode_ndcode3_stream(encoded)
-                .context("NDcode3 連鎖級聯解碼失敗")
+            let raw = l
+                .decode_ndcode3_stream(encoded)
+                .context("NDcode3 連鎖級聯解碼失敗")?;
+            Ok((encoded_len, raw, "stream.ndcode3"))
         }
         t => Err(anyhow::anyhow!("未知的串流段引擎標籤: 0x{:02X}", t)),
     }
@@ -172,10 +203,19 @@ impl StreamingDecompressor {
     }
 
     /// 解壓單一串流段，追加還原的原始資料
+    ///
+    /// 走**具狀態**守衛：以本物件的 `total_decoded` 作為每連線解壓預算，
+    /// 與 `decode_segment` 使用的程序級計數分開。
     pub fn decompress_chunk(&mut self, payload: &[u8]) -> Result<Vec<u8>> {
-        let raw = decode_segment(payload, Some(&self.logic))?;
-        self.total_decoded += raw.len() as u64;
-        Ok(raw)
+        let (encoded_len, raw, path) = decode_segment_unguarded(payload, Some(&self.logic))?;
+        let out = decompression_guard::guard_decoded(
+            encoded_len,
+            raw,
+            decompression_guard::limits(),
+            &mut self.total_decoded,
+            path,
+        )?;
+        Ok(out)
     }
 
     pub fn total_decoded(&self) -> u64 {
