@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Context, Result};
+use crate::pipeline::decompression_guard;
 use crate::pipeline::streaming_compressor::decode_segment;
 
 // 引用整合進來的 logic 模組 (統一傳輸入口)
@@ -52,12 +53,22 @@ impl NDcodeTunEngine {
         match payload[0] {
             x if x == PacketHeader::StreamedSegment as u8 => {
                 // 串流段 (含 0x02 標頭)：走串流段協定解碼 (與序列傳輸解碼互斥分派)
+                // decode_segment 內部已套用解壓炸彈守衛 (capped XZ / 事後驗證)
                 decode_segment(payload, Some(&self.logic)).context("串流段解碼失敗")
             }
-            h => self.logic.decode_transport_serial(payload, |_: String| {}).context(format!(
-                "序列傳輸解碼失敗 (標頭 0x{0:02X})",
-                h
-            )),
+            h => {
+                // 序列傳輸解碼：NDcode3 API 無 max-size 參數，故只能事後守衛。
+                // 事前阻斷由 XZ 子路徑的 capped 解壓與 NDcode3 側 cascade 深度上限負責。
+                let raw = self
+                    .logic
+                    .decode_transport_serial(payload, |_: String| {})
+                    .context(format!("序列傳輸解碼失敗 (標頭 0x{h:02X})"))?;
+                decompression_guard::guard_decoded_global(
+                    payload.len(),
+                    raw,
+                    "transport.serial",
+                )
+            }
         }
     }
 }

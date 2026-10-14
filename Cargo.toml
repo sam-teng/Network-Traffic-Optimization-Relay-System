@@ -45,6 +45,11 @@ sha2 = "0.10"
 rand = "0.8"
 # NDcode3 核心引擎（路徑相依；核心程式碼未隨本倉庫發佈，需自行放置於 NDcode3/ 目錄）
 NDcode3 = { git = "https://github.com/sam-teng/NDcode3.git" }
+# XZ 解壓（直接相依，供 decompression_guard 實作 take() 真輸出上限）
+# 與 NDcode3 使用同一版本/規格，cargo 會合併為同一份建置產物，不增加體積。
+# 必要性：NDcode3 的 safe_xz_decompress API 不接受 max-size 參數，
+# 只有在本 crate 直接持有 XzDecoder 才能在配置完整輸出前中止（解壓炸彈防護）。
+xz = "0.4.6-rc.0"
 # Wasm 沙盒隧道（選項 B：Code-as-Data 解壓縮引擎，純 Rust 解譯器，支援記憶體/CPU fuel 限制）
 # 關閉 default features 以排除 wat 文字解析器，縮小發佈體積；僅允許二進位 .wasm 上傳
 wasmi = { version = "2.0", default-features = false, features = ["std"] }

@@ -2,6 +2,7 @@ pub mod auth;
 pub mod obfuscation;
 pub mod key_manager;
 pub mod gradient_mesh;
+pub mod decompression_guard;
 pub mod streaming_compressor;
 pub mod traffic_classifier;
 
@@ -13,6 +14,9 @@ use tokio::sync::mpsc;
 use crate::ndcode_tun_engine::NDcodeTunEngine;
 use crate::net_transport::{recv_framed_payload, send_framed_payload, TransportCodec};
 pub use auth::NdCodeAuth;
+pub use decompression_guard::{
+    DecompressLimits, ExceedAction, capped_xz_decompress, guard_decoded, looks_like_ndcode,
+};
 pub use key_manager::DynamicKeyManager;
 pub use obfuscation::Obfuscator;
 pub use gradient_mesh::{GradientMeshEngine, GradientFeedbackPacket};
