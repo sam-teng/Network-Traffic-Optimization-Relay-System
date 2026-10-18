@@ -197,11 +197,13 @@ pub fn copy_mac_to_iface(target_iface: &str, mac: &str) -> Result<()> {
     #[cfg(target_os = "linux")]
     {
         // Linux 真 L2：tun_rs 與 tun 皆最終依賴 `ip link` 執行期改 MAC（需 root / CAP_NET_ADMIN）
-        for cmd in [
-            ["link", "set", "dev", target_iface, "down"],
-            ["link", "set", "dev", target_iface, "address", &mac_str.as_str()],
-            ["link", "set", "dev", target_iface, "up"],
-        ] {
+        // 各列長度不同（5/6/5），用 &[&str] slice 避免固定大小陣列型別不符。
+        let cmds: [&[&str]; 3] = [
+            &["link", "set", "dev", target_iface, "down"],
+            &["link", "set", "dev", target_iface, "address", mac_str.as_str()],
+            &["link", "set", "dev", target_iface, "up"],
+        ];
+        for cmd in cmds {
             let status = Command::new("ip")
                 .args(cmd)
                 .output()
